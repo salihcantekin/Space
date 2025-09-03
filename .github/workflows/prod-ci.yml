@@ -57,7 +57,6 @@ jobs:
           PROJECTS=( \
             src/Space.Abstraction/Space.Abstraction.csproj \
             src/Space.DependencyInjection/Space.DependencyInjection.csproj \
-            src/Space.Modules.InMemoryCache/Space.Modules.InMemoryCache.csproj \
           )
           mkdir -p artifacts
           for p in "${PROJECTS[@]}"; do
@@ -75,7 +74,6 @@ jobs:
           PROJECTS=( \
             src/Space.Abstraction/Space.Abstraction.csproj \
             src/Space.DependencyInjection/Space.DependencyInjection.csproj \
-            src/Space.Modules.InMemoryCache/Space.Modules.InMemoryCache.csproj \
           )
           for proj in "${PROJECTS[@]}"; do
             NAME=$(basename "${proj%.*}")
