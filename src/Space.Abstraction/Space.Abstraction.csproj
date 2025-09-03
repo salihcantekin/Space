@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>netstandard2.0</TargetFramework>
+		<RootNamespace>Space.Abstraction</RootNamespace>
+		<LangVersion>latest</LangVersion>
+		<!-- NuGet package metadata -->
+		<PackageId>Space.Abstraction</PackageId>
+		<Authors>salihcantekin</Authors>
+		<Company>Space</Company>
+		<Description>Abstractions for the Space framework, including core interfaces, attributes, and modular pipeline contracts for high-performance .NET applications.</Description>
+		<PackageTags>abstraction;space;mediator;pipeline;modular;dotnet</PackageTags>
+		<RepositoryUrl>https://github.com/salihcantekin/Space</RepositoryUrl>
+		<PackageProjectUrl>https://github.com/salihcantekin/Space</PackageProjectUrl>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+		<IncludeBuildOutput>true</IncludeBuildOutput>
+		<PackageIcon>icon.png</PackageIcon>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="icon.png" Pack="true" PackagePath="" />
+		<None Include="SpaceAbstraction.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.7" />
+		<PackageReference Include="Microsoft.Extensions.ObjectPool" Version="10.0.0-preview.7.25380.108" />
+		<PackageReference Include="System.Threading.Tasks.Extensions" Version="4.5.4" />
+	</ItemGroup>
+
+</Project>

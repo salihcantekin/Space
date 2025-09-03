@@ -1,0 +1,97 @@
+name: Prod CI (Stable Publish)
+
+on:
+  push:
+    branches:
+      - master
+
+concurrency:
+  group: prod-ci
+  cancel-in-progress: true
+
+jobs:
+  prod-ci:
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.x
+            9.x
+
+      - name: Ensure Tag @ HEAD
+        id: tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git describe --tags --exact-match >/dev/null 2>&1; then
+            TAG=$(git describe --tags --exact-match)
+            echo "Found tag: $TAG"
+            VERSION=${TAG#v}
+            echo "VERSION=$VERSION" >> $GITHUB_ENV
+          else
+            echo "No exact tag at HEAD. Create a vX.Y.Z tag before pushing to master." >&2
+            exit 1
+          fi
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build (Release)
+        run: dotnet build -c Release --no-restore -p:Version=${VERSION}
+
+      - name: Test
+        run: dotnet test tests/Space.Tests/Space.Tests.csproj -c Release --no-build --logger trx
+
+      - name: Pack
+        run: |
+          PROJECTS=( \
+            src/Space.Abstraction/Space.Abstraction.csproj \
+            src/Space.DependencyInjection/Space.DependencyInjection.csproj \
+            src/Space.Modules.InMemoryCache/Space.Modules.InMemoryCache.csproj \
+          )
+          mkdir -p artifacts
+          for p in "${PROJECTS[@]}"; do
+            echo "Packing $p -> ${VERSION}";
+            dotnet pack "$p" -c Release --no-build -p:PackageVersion=${VERSION} -p:Version=${VERSION} -o artifacts
+          done
+
+      - name: Publish Stable Packages (NuGet)
+        if: success()
+        run: dotnet nuget push "./artifacts/*.nupkg" --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Publish Outputs
+        run: |
+          mkdir -p drop
+          PROJECTS=( \
+            src/Space.Abstraction/Space.Abstraction.csproj \
+            src/Space.DependencyInjection/Space.DependencyInjection.csproj \
+            src/Space.Modules.InMemoryCache/Space.Modules.InMemoryCache.csproj \
+          )
+          for proj in "${PROJECTS[@]}"; do
+            NAME=$(basename "${proj%.*}")
+            dotnet publish "$proj" -c Release -o "drop/${NAME}" -p:Version=${VERSION}
+          done
+          cp artifacts/*.nupkg drop/
+
+      - name: Upload Drop Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-drop
+          path: drop
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-test-results
+          path: '**/*.trx'

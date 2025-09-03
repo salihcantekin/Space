@@ -1,0 +1,56 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>netstandard2.0</TargetFramework>
+		<LangVersion>latest</LangVersion>
+		<!-- NuGet package metadata -->
+		<PackageId>Space.SourceGenerator</PackageId>
+		<Authors>salihcantekin</Authors>
+		<Company>Space</Company>
+		<Description>Source Generator and Roslyn Analyzer for the Space framework, enabling modular, high-performance .NET applications.</Description>
+		<PackageTags>sourcegenerator;analyzer;space;dotnet</PackageTags>
+		<RepositoryUrl>https://github.com/salihcantekin/Space</RepositoryUrl>
+		<PackageProjectUrl>https://github.com/salihcantekin/Space</PackageProjectUrl>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<Copyright>Copyright © 2024 salihcantekin</Copyright>
+		<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+		<IncludeBuildOutput>true</IncludeBuildOutput>
+		<!--<IsPackable>true</IsPackable>-->
+		<PackageType>Analyzer</PackageType>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<PackageIcon>icon.png</PackageIcon>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<IncludeSourceFilesProjectOutputGroup>true</IncludeSourceFilesProjectOutputGroup>
+		<IncludeSymbolsInSingleFile>true</IncludeSymbolsInSingleFile>
+		<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+		<EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+		<PackageScribanIncludeSource>true</PackageScribanIncludeSource>
+		<IsRoslynAnalyzer>true</IsRoslynAnalyzer>
+		<IsAnalyzer>true</IsAnalyzer>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="icon.png" Pack="true" PackagePath="" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Scriban" Version="6.2.1" IncludeAssets="Build" />
+		<PackageReference Include="Microsoft.CSharp" Version="4.5.0" PrivateAssets="all" />
+		<PackageReference Include="Microsoft.CodeAnalysis.Common" Version="4.14.0" PrivateAssets="all" />
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" PrivateAssets="all" />
+		<PackageReference Include="System.Threading.Tasks.Extensions" Version="4.5.4" PrivateAssets="all" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<AdditionalFiles Include="Resources\DependencyInjectionExtensions.scr" />
+		<AdditionalFiles Include="Resources\ModuleGenerationTemplate.scr" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="Resources\DependencyInjectionExtensions.scr" />
+		<EmbeddedResource Include="Resources\ModuleGenerationTemplate.scr" />
+	</ItemGroup>
+
+</Project>

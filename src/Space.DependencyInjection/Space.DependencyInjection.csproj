@@ -1,0 +1,49 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<!-- NuGet package metadata -->
+		<PackageId>Space.DependencyInjection</PackageId>
+		<Authors>salihcantekin</Authors>
+		<Company>Space</Company>
+		<Description>Dependency Injection extensions for the Space framework. Automatically brings in the Space source generator analyzer for compile-time registration.</Description>
+		<PackageTags>dependencyinjection;space;sourcegenerator;analyzer;dotnet</PackageTags>
+		<RepositoryUrl>https://github.com/salihcantekin/Space</RepositoryUrl>
+		<PackageProjectUrl>https://github.com/salihcantekin/Space</PackageProjectUrl>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+		<IncludeBuildOutput>true</IncludeBuildOutput>
+		<PackageIcon>icon.png</PackageIcon>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)'=='Release'">
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)'=='Debug'">
+		<Version>0.0.0-local</Version>
+		<InformationalVersion>0.0.0-local+$(SourceRevisionId)</InformationalVersion>
+		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="icon.png" Pack="true" PackagePath="" />
+		<None Include="README.md" Pack="true" PackagePath="" />
+		<None Include="..\Space.SourceGenerator\bin\$(Configuration)\netstandard2.0\Space.SourceGenerator.dll" 
+			  Pack="true" 
+			  PackagePath="analyzers/dotnet/cs" 
+			  Visible="false" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.7" />
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.7" />
+		<PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.7" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Space.Abstraction\Space.Abstraction.csproj" />
+	</ItemGroup>
+
+</Project>
