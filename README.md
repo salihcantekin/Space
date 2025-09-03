@@ -1,134 +1,177 @@
-# Space Framework
+# Space
 
-High-performance, source-generator powered mediator-style framework.
+High-performance, source-generator powered mediator / messaging framework for .NET. Eliminates runtime reflection, minimizes boilerplate, and provides an extensible module + pipeline model for cross-cutting concerns (e.g., caching, auditing).
 
-## Sections
-1. Motivation & Goals
-2. Packages
-3. DI Setup
-4. Handlers
-5. Pipelines
-6. Notifications
-7. Modules & Caching
-8. Custom Modules
-9. Known Issues
-10. Planned
-11. Suggestions
+---
+## Status & Packages
 
-## 1. Motivation & Goals
-Remove runtime reflection, reduce boilerplate, support multiple/named handlers, extensible pipelines & modules, attribute-driven design.
+| CI | Branch | Status |
+|----|--------|--------|
+| Prod (Stable Publish) | `master` | ![Prod CI](https://github.com/salihcantekin/Space/actions/workflows/prod-ci.yml/badge.svg) |
+| Dev (Preview Publish) | `dev` | ![Dev CI](https://github.com/salihcantekin/Space/actions/workflows/dev-ci.yml/badge.svg) |
+| Validation (PR / Feature) | PRs -> `dev` / `master` | ![Validation Build](https://github.com/salihcantekin/Space/actions/workflows/validation-build.yml/badge.svg) |
 
-## 2. Packages
-Required: Space.DependencyInjection (brings Space.Abstraction).
-Optional: Space.Modules.InMemoryCache
+### NuGet Packages
 
-## 3. DI Setup
-```csharp
-services.AddSpace(o => o.NotificationDispatchType = NotificationDispatchType.Parallel);
-services.AddSpaceInMemoryCache(); // optional
-ISpace space = services.BuildServiceProvider().GetRequiredService<ISpace>();
+| Package | Stable | Preview | Downloads | Description |
+|---------|--------|---------|-----------|-------------|
+| Space.Abstraction | ![NuGet](https://img.shields.io/nuget/v/Space.Abstraction.svg) | ![NuGet (pre)](https://img.shields.io/nuget/vpre/Space.Abstraction.svg) | ![Downloads](https://img.shields.io/nuget/dt/Space.Abstraction.svg) | Core abstractions: attributes, contexts, contracts |
+| Space.DependencyInjection | ![NuGet](https://img.shields.io/nuget/v/Space.DependencyInjection.svg) | ![NuGet (pre)](https://img.shields.io/nuget/vpre/Space.DependencyInjection.svg) | ![Downloads](https://img.shields.io/nuget/dt/Space.DependencyInjection.svg) | DI extensions + source generator bootstrap |
+| Space.Modules.InMemoryCache | ![NuGet](https://img.shields.io/nuget/v/Space.Modules.InMemoryCache.svg) | ![NuGet (pre)](https://img.shields.io/nuget/vpre/Space.Modules.InMemoryCache.svg) | ![Downloads](https://img.shields.io/nuget/dt/Space.Modules.InMemoryCache.svg) | In-memory caching module + attribute integration |
+
+### Install (Minimal)
+```bash
+# Add DI (brings Abstraction transitively)
+dotnet add package Space.DependencyInjection
+```
+Or explicitly:
+```bash
+dotnet add package Space.Abstraction
+dotnet add package Space.DependencyInjection
+```
+Optional module:
+```bash
+dotnet add package Space.Modules.InMemoryCache
 ```
 
-## 4. Handlers
+---
+## Quick Start
 ```csharp
-public record Login(string UserName);
-public record LoginResult(bool Success);
-public class AuthHandlers
+using Microsoft.Extensions.DependencyInjection;
+
+var services = new ServiceCollection();
+services.AddSpace(opt =>
+{
+    opt.NotificationDispatchType = NotificationDispatchType.Parallel; // or Sequential
+});
+services.AddSpaceInMemoryCache(); // if caching module needed
+
+var provider = services.BuildServiceProvider();
+var space = provider.GetRequiredService<ISpace>();
+
+public sealed record UserLoginRequest(string UserName);
+public sealed record UserLoginResponse(bool Success);
+
+public class UserHandlers
 {
     [Handle]
-    public ValueTask<LoginResult> Login(HandlerContext<Login> ctx)
-        => ValueTask.FromResult(new LoginResult(true));
+    public ValueTask<UserLoginResponse> Login(HandlerContext<UserLoginRequest> ctx)
+        => ValueTask.FromResult(new UserLoginResponse(true));
 }
-var res = await space.Send<LoginResult>(new Login("demo"));
-```
-Named handlers via `[Handle(Name="Alt")]` and `space.Send<Result>(req, name:"Alt")`.
 
-## 5. Pipelines
-```csharp
-[Pipeline(Order = 1)]
-public async ValueTask<LoginResult> Audit(PipelineContext<Login> ctx)
-{ var r = await ctx.Next(ctx); return r; }
+var response = await space.Send<UserLoginResponse>(new UserLoginRequest("demo"));
 ```
 
-## 6. Notifications
+### Named Handlers
 ```csharp
-public record UserLoggedIn(string UserName);
+public class PricingHandlers
+{
+    [Handle(Name = "Default")] public ValueTask<PriceResult> GetDefault(HandlerContext<PriceQuery> ctx) => ...;
+    [Handle(Name = "Discounted")] public ValueTask<PriceResult> GetDiscounted(HandlerContext<PriceQuery> ctx) => ...;
+}
+var discounted = await space.Send<PriceResult>(new PriceQuery(...), handlerName: "Discounted");
+```
+
+### Pipelines
+```csharp
+public class LoggingPipeline
+{
+    [Pipeline(Order = 100)]
+    public async ValueTask<TResponse> Log<TRequest, TResponse>(PipelineContext<TRequest> ctx)
+    {
+        // pre
+        var result = await ctx.Next(ctx);
+        // post
+        return result;
+    }
+}
+```
+
+### Notifications
+```csharp
+public sealed record UserLoggedIn(string UserName);
 public class LoginNotifications
 {
-    [Notification] public ValueTask FileLog(NotificationContext<UserLoggedIn> ctx)=>ValueTask.CompletedTask;
-    [Notification] public ValueTask DbLog(NotificationContext<UserLoggedIn> ctx)=>ValueTask.CompletedTask;
+    [Notification]
+    public ValueTask Log(NotificationContext<UserLoggedIn> ctx) => ValueTask.CompletedTask;
 }
 await space.Publish(new UserLoggedIn("demo"));
 ```
 
-## 7. Modules & Caching
-Annotate handler with module attribute:
+### Caching Module Example
 ```csharp
-[Handle]
-[CacheModule(Duration=60)]
-public ValueTask<UserDetail> Get(HandlerContext<int> ctx) => ...;
+public class UserQueries
+{
+    [Handle]
+    [CacheModule(DurationSeconds = 60)]
+    public ValueTask<UserProfile?> GetUser(HandlerContext<UserId> ctx) => ...;
+}
 ```
-Register in-memory provider: `services.AddSpaceInMemoryCache();`
+`[CacheModule]` (from Space.Modules.InMemoryCache) inserts caching logic before user pipelines.
 
-## 8. Custom Modules
-Create attribute (implements ISpaceModuleAttribute), module class `[SpaceModule(...)]`, config (IModuleConfig), provider (IModuleProvider), DI extension.
+---
+## Key Features
+- Zero runtime reflection for discovery (Roslyn source generator)
+- Minimal boilerplate: annotate methods directly with `[Handle]`, `[Pipeline]`, `[Notification]`
+- Named handlers (multiple strategies for same request/response)
+- Orderable pipelines + early system module execution
+- Extensible module model (e.g., cache) before user pipelines
+- High-performance async signatures (`ValueTask`)
+- Parallel or sequential notification dispatch
+- Multi-targeting (netstandard2.0 + modern .NET)
 
-## 9. Known Issues
-- First handler may see null ISpace due to lazy circular wiring (resolved after first call).
-- Module attribute on one of multiple same Req/Res handlers may incorrectly apply to all.
+---
+## Performance Philosophy
+Space front-loads cost at build time to reduce runtime overhead:
+- Compile-time metadata (registrations, maps)
+- No reflection-based runtime scanning
+- Low allocation pathways (current & planned pooling)
 
-## 10. Planned
-- Provider type on attribute `[CacheModule(Provider=typeof(Redis...))]`.
-- Global defaults via options.
-- Module configs via Options pattern.
+Benchmarks (planned) will compare against other mediator libraries.
 
-## 11. Suggestions
-- Per-call notification dispatch override.
-- ILoggerFactory integration.
-
-## License
-MIT
-
-Repo: https://github.com/salihcantekin/Space
-
-
-# Space
-
-High-performance, source-generator based mediator-style framework eliminating runtime reflection and reducing boilerplate.
-
-## Quick Install
-```bash
-dotnet add package Space.DependencyInjection
-# optional modules
-dotnet add package Space.Modules.InMemoryCache
-```
-
-## Basic Usage
-```csharp
-services.AddSpace(o => o.NotificationDispatchType = NotificationDispatchType.Parallel);
-services.AddSpaceInMemoryCache(); // optional
-var sp = services.BuildServiceProvider();
-var space = sp.GetRequiredService<ISpace>();
-var res = await space.Send<LoginResult>(new Login("demo"));
-await space.Publish(new UserLoggedInSuccessfully("demo"));
-```
-
-## Main Concepts
-- [Handle] methods: `ValueTask<TResponse> Method(HandlerContext<TRequest>)`
-- [Pipeline] methods: middleware around handlers (optional Order)
-- [Notification] methods: event consumers (parallel or sequential dispatch)
-- Modules: system pipelines via attributes (e.g. `[CacheModule(Duration=60)]`)
-- Named handlers: `[Handle(Name="Alt")]` and `space.Send<TRes>(req, name:"Alt")`
-
+---
 ## Documentation
-Full English documentation: `docs/ProjectDoc.en.md`
-Original Turkish notes: `docs/ProjectDoc.txt`
+Primary docs in `docs/`:
 
-## Status
-Known issues & roadmap inside documentation.
+| Topic | Link |
+|-------|------|
+| Project Overview | [ProjectDoc.en.md](docs/ProjectDoc.en.md) |
+| Handlers | [Handlers](docs/Handlers.md) |
+| Pipelines | [Pipelines](docs/Pipelines.md) |
+| Notifications | [Notifications](docs/Notifications.md) |
+| Modules | [Modules](docs/Modules.md) |
+| Developer Recommendations | [DeveloperRecommendations](docs/DeveloperRecommendations.md) |
+| Known Issues | [KnownIssues](docs/KnownIssues.md) |
+| Planned Improvements | [PlannedImprovements](docs/PlannedImprovements.md) |
 
-License: MIT
-Repository: https://github.com/salihcantekin/Space
+Per-package:
+- [Space.Abstraction](src/Space.Abstraction/README.md)
+- [Space.DependencyInjection](src/Space.DependencyInjection/README.md)
+
+---
+## Roadmap & Issues
+See GitHub Issues for:
+- Planned improvements (attribute parameters, global defaults, Options pattern)
+- Known issues (initial Lazy `ISpace` null, module scoping on named handlers)
+
+Contributions welcome via issues & PRs.
+
+---
+## Versioning & Releases
+- `master`: tagged semantic versions (`vX.Y.Z`) ? stable NuGet
+- `dev`: continuous preview (`X.Y.(Patch+1)-preview.<run>`)
+- Feature branches: validation build only
+
+---
+## License
+MIT.
+
+---
+## Disclaimer
+APIs may evolve while early preview features stabilize. Track releases for changes.
+
+
+
 
 
 
