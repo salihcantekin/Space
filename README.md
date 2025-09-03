@@ -21,11 +21,6 @@ High-performance, source-generator powered mediator / messaging framework for .N
 
 ### Install (Minimal)
 ```bash
-# Add DI (brings Abstraction transitively)
-dotnet add package Space.DependencyInjection
-```
-Or explicitly:
-```bash
 dotnet add package Space.Abstraction
 dotnet add package Space.DependencyInjection
 ```
