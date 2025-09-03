@@ -4,10 +4,6 @@ using Space.Abstraction.Attributes;
 using Space.Abstraction.Context;
 using Space.Abstraction.Contracts;
 using Space.DependencyInjection;
-using Space.Modules.InMemoryCache;
-using Space.Modules.InMemoryCache.Cache;
-//using Space.Modules.InMemoryCache;
-//using Space.Modules.InMemoryCache.Cache;
 using Space.TestConsole.Services;
 
 var services = new ServiceCollection();
@@ -18,9 +14,6 @@ services.AddSpace(opt =>
     opt.ServiceLifetime = ServiceLifetime.Scoped;
     opt.NotificationDispatchType = NotificationDispatchType.Parallel;
 });
-
-services.AddSpaceInMemoryCache();
-
 
 var sp = services.BuildServiceProvider();
 ISpace space = sp.GetRequiredService<ISpace>();
@@ -50,7 +43,6 @@ public class TestHandler(IDataService dataService)
 
 
     [Handle]
-    [CacheModule(Duration = 60)]
     //[AuditModule]
     public ValueTask<UserCreateResponse> Handle(HandlerContext<UserCreateCommand> ctx)
     {
@@ -133,48 +125,3 @@ public record UserCreateCommand : IRequest<UserCreateResponse>
     public string Name { get; init; } = string.Empty;
     public string Email { get; init; } = string.Empty;
 }
-
-
-//public sealed class AuditModuleProvider : IAuditModuleProvider
-//{
-//    public ValueTask Before<TRequest, TResponse>(TRequest request)
-//    {
-//        //Log.Add($"AuditModule BEFORE for Request: {request}");
-
-//        return default;
-//    }
-
-//    public ValueTask After<TRequest, TResponse>(TResponse response)
-//    {
-//        //Log.Add($"AuditModule AFTER with Response: {response}");
-//        return default;
-//    }
-//}
-
-//public sealed class RedisModuleProvider : ICacheModuleProvider
-//{
-//    private readonly ConcurrentDictionary<string, object> valueStorage = [];
-
-//    public string GetKey<TRequest>(TRequest request)
-//    {
-//        return request?.ToString();
-//    }
-
-//    public ValueTask Store<TResponse>(string key, TResponse response, CacheModuleConfig config)
-//    {
-//        valueStorage[key] = response;
-//        return default;
-//    }
-
-//    public bool TryGet<TResponse>(string key, out TResponse response, CacheModuleConfig config)
-//    {
-//        response = default;
-
-//        if (!valueStorage.TryGetValue(key, out var objResponse))
-//            return false;
-
-//        response = (TResponse)objResponse;
-//        Log.Add("Data returned from Redis Cache");
-//        return true;
-//    }
-//}
