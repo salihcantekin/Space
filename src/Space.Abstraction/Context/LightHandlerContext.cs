@@ -3,18 +3,10 @@ using System.Threading;
 
 namespace Space.Abstraction.Context;
 
-public readonly ref struct LightHandlerContext<TRequest>
+public readonly ref struct LightHandlerContext<TRequest>(TRequest request, IServiceProvider serviceProvider, ISpace space, CancellationToken cancellationToken)
 {
-    public TRequest Request { get; }
-    public IServiceProvider ServiceProvider { get; }
-    public ISpace Space { get; }
-    public CancellationToken CancellationToken { get; }
-
-    public LightHandlerContext(TRequest request, IServiceProvider serviceProvider, ISpace space, CancellationToken cancellationToken)
-    {
-        Request = request;
-        ServiceProvider = serviceProvider;
-        Space = space;
-        CancellationToken = cancellationToken;
-    }
+    public TRequest Request { get; } = request;
+    public IServiceProvider ServiceProvider { get; } = serviceProvider;
+    public ISpace Space { get; } = space;
+    public CancellationToken CancellationToken { get; } = cancellationToken;
 }

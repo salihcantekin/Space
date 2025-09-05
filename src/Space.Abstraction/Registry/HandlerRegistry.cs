@@ -67,11 +67,23 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
         if (!isSealed) return false;
         var key = SpaceRegistry.GenerateKey<TRequest>(name);
         if (readOnlyHandlerMap != null && readOnlyHandlerMap.TryGetValue(key, out var obj) && obj is SpaceRegistry.HandlerEntry<TRequest, TResponse> he)
-        {
-            entry = he; return true;
-        }
+        { entry = he; return true; }
         if (string.IsNullOrEmpty(name) && readOnlyHandlerMapByType != null && readOnlyHandlerMapByType.TryGetValue(typeof(TRequest), out var byType) && byType is SpaceRegistry.HandlerEntry<TRequest, TResponse> he2)
         { entry = he2; return true; }
+        return false;
+    }
+
+    internal bool TryGetHandlerEntryByRuntimeType(Type requestType, string name, out object entryObj)
+    {
+        entryObj = null;
+        if (!isSealed) return false;
+        if (string.IsNullOrEmpty(name))
+        {
+            if (readOnlyHandlerMapByType != null && readOnlyHandlerMapByType.TryGetValue(requestType, out var direct))
+            { entryObj = direct; return true; }
+        }
+        else if (readOnlyHandlerMap != null && readOnlyHandlerMap.TryGetValue((requestType, name), out var named))
+        { entryObj = named; return true; }
         return false;
     }
 
@@ -99,20 +111,15 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
     }
 
     public ValueTask<object> DispatchHandler(object request, string name = "", CancellationToken ct = default)
-    {
-        return DispatchHandlerInternal(request, name, serviceProvider, ct);
-    }
+        => DispatchHandlerInternal(request, name, serviceProvider, ct);
 
     public ValueTask<object> DispatchHandler(object request, string name, IServiceProvider executionProvider, CancellationToken ct = default)
-    {
-        return DispatchHandlerInternal(request, name, executionProvider ?? serviceProvider, ct);
-    }
+        => DispatchHandlerInternal(request, name, executionProvider ?? serviceProvider, ct);
 
     public ValueTask<TResponse> DispatchHandler<TRequest, TResponse>(object request, string name, IServiceProvider executionProvider, CancellationToken ct = default)
     {
         if (request is not TRequest typed)
             throw new InvalidOperationException($"Request type mismatch. Expected {typeof(TRequest)}, got {request?.GetType()}");
-
         var ctx = HandlerContext<TRequest>.Create(executionProvider, typed, ct);
         return DispatchHandler<TRequest, TResponse>(executionProvider, ctx, name);
     }
@@ -134,7 +141,6 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
                 var ctx = HandlerContextStruct.Create(execProvider, request, space, ct);
                 return objectHandler.InvokeObject(ctx);
             }
-
             throw new InvalidOperationException($"Handler not found for type {type}");
         }
 

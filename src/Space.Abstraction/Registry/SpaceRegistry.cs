@@ -66,6 +66,11 @@ public partial class SpaceRegistry
     internal bool TryGetHandlerEntry<TRequest, TResponse>(string name, out HandlerEntry<TRequest, TResponse> entry)
         => handlerRegistry.TryGetHandlerEntry<TRequest, TResponse>(name, out entry);
 
+    // Expose wrapper for runtime type handler entry lookup to optimize object Send path
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal bool TryGetHandlerEntryByRuntimeType(Type requestType, string name, out object entryObj)
+        => handlerRegistry.TryGetHandlerEntryByRuntimeType(requestType, name, out entryObj);
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ValueTask<TResponse> DispatchHandler<TRequest, TResponse>(IServiceProvider execProvider, HandlerContext<TRequest> ctx, string name = "")
         => handlerRegistry.DispatchHandler<TRequest, TResponse>(execProvider, ctx, name);

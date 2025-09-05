@@ -18,7 +18,7 @@ services.AddSpace(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
 
 var sp = services.BuildServiceProvider();
 var space = sp.GetRequiredService<ISpace>();
-var res = await space.Send<CommandResponse>(new Request(2));
+var res = await space.Send<CommandResponse>(new SpaceRequest(2));
 
 Console.WriteLine("Res: " + res);
 
@@ -31,6 +31,7 @@ public class Bench
     private MediatR.IMediator mediatR;
 
     private static readonly Request StaticRequest = new(2);
+    private static readonly SpaceRequest StaticSpaceRequest = new(2);
 
     [Params(1)] public int N;
 
@@ -39,14 +40,13 @@ public class Bench
     {
         var services = new ServiceCollection();
         services.AddSpace(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
-        services.AddSpaceSourceGenerated(opt => { opt.ServiceLifetime = ServiceLifetime.Singleton; });
         var sp = services.BuildServiceProvider();
         space = sp.GetRequiredService<ISpace>();
 
         // Pool warmup: create & return contexts a number of times so steady-state ölçülsün
         for (int i = 0; i < 10_000; i++)
         {
-            _ = space.Send<Request, CommandResponse>(StaticRequest).GetAwaiter().GetResult();
+            _ = space.Send<SpaceRequest, CommandResponse>(StaticSpaceRequest).GetAwaiter().GetResult();
         }
     }
 
@@ -72,13 +72,13 @@ public class Bench
     [Benchmark]
     public async Task Space_ReqRes()
     {
-        _ = await space.Send<Request, CommandResponse>(new Request(2));
+        _ = await space.Send<SpaceRequest, CommandResponse>(new SpaceRequest(2));
     }
 
     [Benchmark]
     public async Task Space_Res()
     {
-        _ = await space.Send<CommandResponse>(new Request(2));
+        _ = await space.Send<CommandResponse>(new SpaceRequest(2));
     }
 
     [Benchmark]
@@ -91,14 +91,14 @@ public class Bench
     public async Task Space_ReqRes_Loop()
     {
         for (int i = 0; i < 1_000; i++)
-            _ = await space.Send<Request, CommandResponse>(StaticRequest);
+            _ = await space.Send<SpaceRequest, CommandResponse>(StaticSpaceRequest);
     }
 
     [Benchmark(Description = "Space Res 1K Loop")]
     public async Task Space_Res_Loop()
     {
         for (int i = 0; i < 1_000; i++)
-            _ = await space.Send<CommandResponse>(StaticRequest);
+            _ = await space.Send<CommandResponse>(StaticSpaceRequest);
     }
 
     [Benchmark(Description = "Mediator 1K Loop")]
@@ -112,12 +112,13 @@ public class Bench
 public class TestHandler
 {
     [Handle]
-    public ValueTask<CommandResponse> Handle(HandlerContext<Request> request)
+    public ValueTask<CommandResponse> Handle(HandlerContext<SpaceRequest> request)
     {
         return ValueTask.FromResult(new CommandResponse(2));
     }
 }
 
+public record struct SpaceRequest(int Id) : Space.Abstraction.Contracts.IRequest<CommandResponse> { }
 public record struct Request(int Id) : Mediator.IRequest<CommandResponse> { }
 public record struct Request2(int Id) : MediatR.IRequest<CommandResponse> { }
 public record struct CommandResponse(int Id);

@@ -15,14 +15,12 @@ public delegate ValueTask<TResponse> PipelineInvoker<TRequest, TResponse>(Pipeli
 
 public partial class SpaceRegistry
 {
-    internal sealed class HandlerEntry<TRequest, TResponse>
-        : IObjectHandlerEntry
+    internal sealed class HandlerEntry<TRequest, TResponse> : IObjectHandlerEntry
     {
         private readonly HandlerInvoker<TRequest, TResponse> handlerInvoker;
         private readonly LightHandlerInvoker<TRequest, TResponse> lightInvoker;
         private readonly List<PipelineContainer> pipelines;
-        private readonly bool hasPipelines;
-        private readonly bool hasLight; // initialized in ctor
+        private bool hasPipelines; // must be mutable to reflect late pipeline registration
 
         private readonly object composeLock = new();
         private PipelineContainer[] orderedPipelines; // cached ordered list
@@ -39,11 +37,12 @@ public partial class SpaceRegistry
         }
 
         internal bool IsPipelineFree => !hasPipelines;
-        internal bool HasLightInvoker => hasLight;
+        internal bool HasLightInvoker => lightInvoker != null && !hasPipelines;
 
-        internal HandlerEntry(HandlerInvoker<TRequest, TResponse> handlerInvoker,
-                              LightHandlerInvoker<TRequest, TResponse> lightInvoker,
-                              IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelineInvokers)
+        internal HandlerEntry(
+            HandlerInvoker<TRequest, TResponse> handlerInvoker,
+            LightHandlerInvoker<TRequest, TResponse> lightInvoker,
+            IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelineInvokers)
         {
             this.handlerInvoker = handlerInvoker;
             this.lightInvoker = lightInvoker;
@@ -51,12 +50,12 @@ public partial class SpaceRegistry
                 ? new List<PipelineContainer>(pipelineInvokers.Select(p => new PipelineContainer(p.config, p.invoker)))
                 : new List<PipelineContainer>();
             hasPipelines = pipelines.Count > 0;
-            hasLight = lightInvoker != null && !hasPipelines;
         }
 
         internal void AddPipeline(PipelineInvoker<TRequest, TResponse> invoker, PipelineConfig pipelineConfig)
         {
             pipelines.Add(new PipelineContainer(pipelineConfig, invoker));
+            hasPipelines = true; // ensure fast-path bypasses light invoker when any pipeline exists
             orderedPipelines = null; // invalidate order cache
             compositionDirty = true; // force recompose
         }
@@ -82,7 +81,7 @@ public partial class SpaceRegistry
                 if (!compositionDirty)
                     return;
 
-                if (pipelines.Count == 0)
+                if (!hasPipelines || pipelines.Count == 0)
                 {
                     cachedRootDelegate = null; // no pipeline chain needed
                 }
@@ -113,13 +112,14 @@ public partial class SpaceRegistry
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal ValueTask<TResponse> InvokeLight(IServiceProvider sp, ISpace space, TRequest request, CancellationToken ct)
         {
-            if (!hasLight)
+            ct.ThrowIfCancellationRequested();
+#if DEBUG
+            if (!HasLightInvoker)
             {
-                // fallback allocate context path
-                var ctxAlloc = HandlerContext<TRequest>.Create(sp, request, ct);
-                var vtAlloc = handlerInvoker(ctxAlloc).AwaitAndReturnHanderInvoke(ctxAlloc);
-                return vtAlloc;
+                var ctxDbg = HandlerContext<TRequest>.Create(sp, request, ct);
+                return handlerInvoker(ctxDbg).AwaitAndReturnHanderInvoke(ctxDbg);
             }
+#endif
             var lctx = new LightHandlerContext<TRequest>(request, sp, space, ct);
             return lightInvoker(in lctx);
         }
@@ -150,7 +150,7 @@ public partial class SpaceRegistry
 
         public ValueTask<object> InvokeObject(HandlerContextStruct handlerContext)
         {
-            if (hasLight)
+            if (HasLightInvoker)
             {
                 var vtLight = InvokeLight(handlerContext.ServiceProvider, handlerContext.Space, (TRequest)handlerContext.Request, handlerContext.CancellationToken);
                 if (vtLight.IsCompletedSuccessfully)
@@ -158,10 +158,7 @@ public partial class SpaceRegistry
                     return new ValueTask<object>(vtLight.Result!);
                 }
                 return AwaitLight(vtLight);
-
-                static async ValueTask<object> AwaitLight(ValueTask<TResponse> t)
-                {
-                    var r = await t; return (object)r!; }
+                static async ValueTask<object> AwaitLight(ValueTask<TResponse> t) { var r = await t; return (object)r!; }
             }
 
             if (!hasPipelines)
@@ -174,8 +171,7 @@ public partial class SpaceRegistry
                     return new ValueTask<object>(vtFast.Result!);
                 }
                 return AwaitFast(vtFast, ctxFast);
-                static async ValueTask<object> AwaitFast(ValueTask<TResponse> t, HandlerContext<TRequest> c)
-                { try { return (object)await t; } finally { HandlerContextPool<TRequest>.Return(c); } }
+                static async ValueTask<object> AwaitFast(ValueTask<TResponse> t, HandlerContext<TRequest> c) { try { return (object)await t; } finally { HandlerContextPool<TRequest>.Return(c); } }
             }
 
             var ctx = HandlerContext<TRequest>.Create(handlerContext);
@@ -187,9 +183,7 @@ public partial class SpaceRegistry
                 return new ValueTask<object>(result);
             }
             return Await(vt, ctx);
-
-            static async ValueTask<object> Await(ValueTask<TResponse> t, HandlerContext<TRequest> c)
-            { try { return (object)await t; } finally { HandlerContextPool<TRequest>.Return(c); } }
+            static async ValueTask<object> Await(ValueTask<TResponse> t, HandlerContext<TRequest> c) { try { return (object)await t; } finally { HandlerContextPool<TRequest>.Return(c); } }
         }
     }
 }

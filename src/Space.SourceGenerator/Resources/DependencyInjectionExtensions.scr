@@ -15,12 +15,11 @@ namespace Space.DependencyInjection
 {
     public static class SourceGeneratorDependencyInjectionExtensions
     {
-        // Generic light invoker state holder (allocation-free after first use per TReq per thread)
+        // Light invoker state holder (per TReq per thread)
         internal static class LightInvokerState<TReq, THandler, TRes>
         {
             [ThreadStatic] private static HandlerContext<TReq> _ctx;
             public static ValueTask<TRes> Invoke(in LightHandlerContext<TReq> lctx, THandler singleton, bool isSingleton,
-                                                 IServiceProvider rootSp,
                                                  Func<THandler, HandlerContext<TReq>, ValueTask<TRes>> body)
             {
                 var ctx = _ctx;
@@ -93,7 +92,7 @@ namespace Space.DependencyInjection
                     };
 
                     LightHandlerInvoker<TReq, TRes> light = (in LightHandlerContext<TReq> lctx) =>
-                        LightInvokerState<TReq, THandler, TRes>.Invoke(in lctx, singleton, isSingleton, sp, body);
+                        LightInvokerState<TReq, THandler, TRes>.Invoke(in lctx, singleton, isSingleton, body);
 
                     registry.RegisterHandler<TReq, TRes>(normal, name, null, light);
                 }
@@ -123,11 +122,7 @@ namespace Space.DependencyInjection
 
                 // Handlers / Pipelines / Modules
                 {{ for h in Handlers }}
-                {{ hasPipe = false }}
-                {{ for _p in h.PipelineCompileModels }}{{ hasPipe = true }}{{ break }}{{ end }}
-                {{ hasModule = false }}
-                {{ for _m in h.ModuleCompileModels }}{{ hasModule = true }}{{ break }}{{ end }}
-                {{ if !hasPipe && !hasModule }}
+                {{ if (h.PipelineCompileModels.size == 0 && h.ModuleCompileModels.size == 0) }}
                 // Light path (no pipelines/modules)
                 RegLight<{{ h.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}",
                     (inst, ctx) => {{ if h.IsValueTask }} inst.{{ h.MethodName }}(ctx) {{ else }} VT(inst.{{ h.MethodName }}(ctx)) {{ end }});
