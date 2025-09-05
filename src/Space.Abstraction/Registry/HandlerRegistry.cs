@@ -19,22 +19,22 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
     public static ISpace Space { get; private set; }
 
     public void RegisterHandler<TRequest, TResponse>(
-        Func<HandlerContext<TRequest>, ValueTask<TResponse>> handler,
+        HandlerInvoker<TRequest, TResponse> invoker,
         string name = "",
-        IEnumerable<Func<PipelineContext<TRequest>, PipelineDelegate<TRequest, TResponse>, ValueTask<TResponse>>> pipelines = null)
+        IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelines = null)
     {
         if (isSealed)
             throw new InvalidOperationException("Registration is sealed. No more handlers can be registered.");
 
         var key = SpaceRegistry.GenerateKey<TRequest>(name);
-        var entry = new SpaceRegistry.HandlerEntry<TRequest, TResponse>(handler, pipelines);
+        var entry = new SpaceRegistry.HandlerEntry<TRequest, TResponse>(invoker, pipelines);
 
         handlerMap[key] = entry;
         handlerMapByType[typeof(TRequest)] = entry;
     }
 
     public void RegisterPipeline<TRequest, TResponse>(string handlerName, PipelineConfig pipelineConfig,
-        Func<PipelineContext<TRequest>, PipelineDelegate<TRequest, TResponse>, ValueTask<TResponse>> pipeline)
+        PipelineInvoker<TRequest, TResponse> pipelineInvoker)
     {
         if (isSealed)
             throw new InvalidOperationException("Registration is sealed. No more pipelines can be registered.");
@@ -43,7 +43,7 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
 
         if (handlerMap.TryGetValue(key, out var handlerObj) && handlerObj is SpaceRegistry.HandlerEntry<TRequest, TResponse> entry)
         {
-            entry.AddPipeline(pipeline, pipelineConfig);
+            entry.AddPipeline(pipelineInvoker, pipelineConfig);
         }
     }
 
@@ -60,14 +60,28 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
         }
     }
 
-    public ValueTask<TResponse> DispatchHandler<TRequest, TResponse>(HandlerContext<TRequest> ctx, string name = "")
+    public bool TryGetHandlerEntry<TRequest, TResponse>(string name, out SpaceRegistry.HandlerEntry<TRequest, TResponse> entry)
+    {
+        entry = null;
+        if (!isSealed) return false;
+        var key = SpaceRegistry.GenerateKey<TRequest>(name);
+        if (readOnlyHandlerMap != null && readOnlyHandlerMap.TryGetValue(key, out var obj) && obj is SpaceRegistry.HandlerEntry<TRequest, TResponse> he)
+        {
+            entry = he; return true;
+        }
+        if (string.IsNullOrEmpty(name) && readOnlyHandlerMapByType != null && readOnlyHandlerMapByType.TryGetValue(typeof(TRequest), out var byType) && byType is SpaceRegistry.HandlerEntry<TRequest, TResponse> he2)
+        { entry = he2; return true; }
+        return false;
+    }
+
+    public ValueTask<TResponse> DispatchHandler<TRequest, TResponse>(IServiceProvider execProvider, HandlerContext<TRequest> ctx, string name = "")
     {
         if (!isSealed)
             throw new InvalidOperationException("Registration is not sealed. Call CompleteRegistration() before dispatching.");
 
         var key = SpaceRegistry.GenerateKey<TRequest>(name);
 
-        space ??= serviceProvider.GetService<ISpace>();
+        space ??= execProvider.GetService<ISpace>();
         Space ??= space;
 
         if (readOnlyHandlerMap.TryGetValue(key, out var handlerObj) && handlerObj is SpaceRegistry.HandlerEntry<TRequest, TResponse> entry)
@@ -85,19 +99,38 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
 
     public ValueTask<object> DispatchHandler(object request, string name = "", CancellationToken ct = default)
     {
+        return DispatchHandlerInternal(request, name, serviceProvider, ct);
+    }
+
+    public ValueTask<object> DispatchHandler(object request, string name, IServiceProvider executionProvider, CancellationToken ct = default)
+    {
+        return DispatchHandlerInternal(request, name, executionProvider ?? serviceProvider, ct);
+    }
+
+    public ValueTask<TResponse> DispatchHandler<TRequest, TResponse>(object request, string name, IServiceProvider executionProvider, CancellationToken ct = default)
+    {
+        if (request is not TRequest typed)
+            throw new InvalidOperationException($"Request type mismatch. Expected {typeof(TRequest)}, got {request?.GetType()}");
+
+        var ctx = HandlerContext<TRequest>.Create(executionProvider, typed, ct);
+        return DispatchHandler<TRequest, TResponse>(executionProvider, ctx, name);
+    }
+
+    private ValueTask<object> DispatchHandlerInternal(object request, string name, IServiceProvider execProvider, CancellationToken ct)
+    {
         if (!isSealed)
             throw new InvalidOperationException("Registration is not sealed. Call CompleteRegistration() before dispatching.");
 
         var type = request.GetType();
 
-        space ??= serviceProvider.GetService<ISpace>();
+        space ??= execProvider.GetService<ISpace>();
         Space ??= space;
 
         if (string.IsNullOrEmpty(name))
         {
             if (readOnlyHandlerMapByType.TryGetValue(type, out var handlerObj) && handlerObj is SpaceRegistry.IObjectHandlerEntry objectHandler)
             {
-                var ctx = HandlerContextStruct.Create(serviceProvider, request, space, ct);
+                var ctx = HandlerContextStruct.Create(execProvider, request, space, ct);
                 return objectHandler.InvokeObject(ctx);
             }
 
@@ -106,7 +139,7 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
 
         if (readOnlyHandlerMap.TryGetValue((type, name), out var handlerObj2) && handlerObj2 is SpaceRegistry.IObjectHandlerEntry objectHandler2)
         {
-            var ctx = HandlerContextStruct.Create(serviceProvider, request, space, ct);
+            var ctx = HandlerContextStruct.Create(execProvider, request, space, ct);
             return objectHandler2.InvokeObject(ctx);
         }
 

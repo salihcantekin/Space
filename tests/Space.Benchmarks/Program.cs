@@ -10,38 +10,8 @@ using Space.Abstraction.Context;
 using Space.DependencyInjection;
 using System.Reflection;
 
-//Console.WriteLine("Hello, World!");
-
 BenchmarkRunner.Run<Bench>();
 return;
-
-Console.WriteLine("Press ENTER to start");
-Console.ReadLine();
-
-Bench b = new();
-b.SpaceSetup();
-b.MediatRSetup();
-b.MediatorSetup();
-
-int counter = 100_000;
-counter = 1;
-
-//await b.SendMediator();
-for (int i = 0; i < counter; i++)
-{
-    await b.Space_Res();
-    await b.SendMediatR();
-    await b.SendMediator();
-}
-
-//Console.WriteLine("DONE");
-
-
-//public static class MediatorExtensions
-
-
-
-
 
 [SimpleJob]
 [MemoryDiagnoser]
@@ -51,40 +21,40 @@ public class Bench
     private Mediator.IMediator mediator;
     private MediatR.IMediator mediatR;
 
+    private static readonly Request StaticRequest = new(2);
 
-    [GlobalSetup(Targets = [nameof(Space_Res), nameof(Space_ReqRes)])]
+    [Params(1)] public int N;
+
+    [GlobalSetup(Targets = [nameof(Space_Res), nameof(Space_ReqRes), nameof(Space_Res_Loop), nameof(Space_ReqRes_Loop)])]
     public void SpaceSetup()
     {
         var services = new ServiceCollection();
-        services.AddSpace();
-
+        services.AddSpace(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
         var sp = services.BuildServiceProvider();
         space = sp.GetRequiredService<ISpace>();
+
+        // Pool warmup: create & return contexts a number of times so steady-state ölçülsün
+        for (int i = 0; i < 10_000; i++)
+        {
+            _ = space.Send<Request, CommandResponse>(StaticRequest).GetAwaiter().GetResult();
+        }
     }
 
-
-    [GlobalSetup(Targets = [nameof(SendMediator)])]
+    [GlobalSetup(Targets = [nameof(SendMediator), nameof(SendMediator_Loop)])]
     public void MediatorSetup()
     {
         var services = new ServiceCollection();
-        services.AddMediator(opt =>
-        {
-            opt.ServiceLifetime = ServiceLifetime.Scoped;
-        });
-
-        //services.AddTransient(typeof(Mediator.IPipelineBehavior<Request, CommandResponse>), typeof(CommandHandlerPipeline));
-
+        services.AddMediator(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
         var sp = services.BuildServiceProvider();
         mediator = sp.GetRequiredService<Mediator.IMediator>();
+        for (int i = 0; i < 10_000; i++) _ = mediator.Send(new Request(2)).GetAwaiter().GetResult();
     }
 
-    [GlobalSetup(Targets = [nameof(SendMediatR)])]
+    [GlobalSetup]
     public void MediatRSetup()
     {
         var services = new ServiceCollection();
         services.AddMediatR(Assembly.GetExecutingAssembly());
-        //services.AddTransient(typeof(MediatR.IPipelineBehavior<Request2, CommandResponse>), typeof(CommandHandlerPipeline2));
-
         var sp = services.BuildServiceProvider();
         mediatR = sp.GetRequiredService<MediatR.IMediator>();
     }
@@ -107,74 +77,47 @@ public class Bench
         _ = await mediator.Send(new Request(2));
     }
 
-    [Benchmark]
-    public async Task SendMediatR()
+    [Benchmark(Description = "Space ReqRes 1K Loop")]
+    public async Task Space_ReqRes_Loop()
     {
-        _ = await mediatR.Send(new Request2(2));
+        for (int i = 0; i < 1_000; i++)
+            _ = await space.Send<Request, CommandResponse>(StaticRequest);
+    }
+
+    [Benchmark(Description = "Space Res 1K Loop")]
+    public async Task Space_Res_Loop()
+    {
+        for (int i = 0; i < 1_000; i++)
+            _ = await space.Send<CommandResponse>(StaticRequest);
+    }
+
+    [Benchmark(Description = "Mediator 1K Loop")]
+    public async Task SendMediator_Loop()
+    {
+        for (int i = 0; i < 1_000; i++)
+            _ = await mediator.Send(StaticRequest);
     }
 }
 
-
-public class TestHandler//: IHandler<Request, CommandResponse>
+public class TestHandler
 {
     [Handle]
     public ValueTask<CommandResponse> Handle(HandlerContext<Request> request)
     {
         return ValueTask.FromResult(new CommandResponse(2));
     }
-
-    //[Pipeline]
-    //public ValueTask<CommandResponse> Pipeline(PipelineContext<Request> ctx, PipelineDelegate<Request, CommandResponse> next)
-    //{
-    //    return next(ctx);
-    //}
-
-
-
-    //public class CommandPipeline : IPipelineBehavior<Request, CommandResponse>
-    //{ 
-    //    public ValueTask<CommandResponse> Handle(Request message, MessageHandlerDelegate<Request, CommandResponse> next, CancellationToken cancellationToken)
-    //    {
-    //        return next(message, cancellationToken);
-    //    }
-    //}
 }
 
-public record Request(int Id) : Mediator.IRequest<CommandResponse> { }
-
-public record Request2(int Id) : MediatR.IRequest<CommandResponse> { }
-
-public record CommandResponse(int Id);
+public record struct Request(int Id) : Mediator.IRequest<CommandResponse> { }
+public record struct Request2(int Id) : MediatR.IRequest<CommandResponse> { }
+public record struct CommandResponse(int Id);
 
 public class CommandHandler : Mediator.IRequestHandler<Request, CommandResponse>
 {
-    public ValueTask<CommandResponse> Handle(Request request, CancellationToken cancellationToken)
-    {
-        return ValueTask.FromResult(new CommandResponse(2));
-    }
+    public ValueTask<CommandResponse> Handle(Request request, CancellationToken cancellationToken) => ValueTask.FromResult(new CommandResponse(2));
 }
-
-
-//public class CommandHandlerPipeline : Mediator.IPipelineBehavior<Request, CommandResponse>
-//{
-//    public ValueTask<CommandResponse> Handle(Request request, MessageHandlerDelegate<Request, CommandResponse> next, CancellationToken cancellationToken)
-//    {
-//        return next(request, cancellationToken);
-//    }
-//}
 
 public class CommandHandler2 : MediatR.IRequestHandler<Request2, CommandResponse>
 {
-    public Task<CommandResponse> Handle(Request2 request, CancellationToken cancellationToken)
-    {
-        return Task.FromResult(new CommandResponse(2));
-    }
+    public Task<CommandResponse> Handle(Request2 request, CancellationToken cancellationToken) => Task.FromResult(new CommandResponse(2));
 }
-
-//public class CommandHandlerPipeline2 : MediatR.IPipelineBehavior<Request2, CommandResponse>
-//{
-//    public Task<CommandResponse> Handle(Request2 request, MediatR.RequestHandlerDelegate<CommandResponse> next, CancellationToken cancellationToken)
-//    {
-//        return next();
-//    }
-//}

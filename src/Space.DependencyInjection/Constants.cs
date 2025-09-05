@@ -17,7 +17,7 @@ public static class Constants
     public static class TypeNames
     {
         public const string HandlerInfo = "HandlerInfo";
-        public const string SpaceRegistry = "SpaceRegistry";
+        public const string SpaceRegistry = "spaceRegistry";
         public const string SampleHandler = "SampleHandler";
     }
 

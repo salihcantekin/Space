@@ -9,9 +9,12 @@ using Space.TestConsole.Services;
 var services = new ServiceCollection();
 services.AddScoped<IDataService, DataService>();
 
+Console.WriteLine("Press ENTER to start");
+Console.ReadLine();
+
 services.AddSpace(opt =>
 {
-    opt.ServiceLifetime = ServiceLifetime.Scoped;
+    opt.ServiceLifetime = ServiceLifetime.Singleton;
     opt.NotificationDispatchType = NotificationDispatchType.Parallel;
 });
 
@@ -19,17 +22,30 @@ var sp = services.BuildServiceProvider();
 ISpace space = sp.GetRequiredService<ISpace>();
 
 var command = new UserCreateCommand() { Email = "salihcantekin@gmail.com", Name = "SalihCantekin" };
-var res = await space.Send(command);
-res = await space.Send(command);
 
 
-Console.ReadKey();
+//Console.WriteLine("Press ENTER to start");
+//Console.ReadLine();
+
+int counter = 100_000;
+//counter = 2;
+
+for (int i = 0; i < counter; i++)
+{
+    _ = await space.Send<UserCreateResponse>(command);
+}
+
+//var res = await space.Send(command);
+//res = await space.Send(command);
+
+
+//Console.ReadKey();
 
 Log.Add("DONE!");
 
 
 
-public class TestHandler(IDataService dataService)
+public class TestHandler
 //: IHandler<UserCreateCommand, UserCreateResponse>
 {
     //[Handle(Name = "NothingHandle")]
@@ -42,39 +58,41 @@ public class TestHandler(IDataService dataService)
     //}
 
 
+    UserCreateResponse res = new("");
+
     [Handle]
     //[AuditModule]
     public ValueTask<UserCreateResponse> Handle(HandlerContext<UserCreateCommand> ctx)
     {
-        var randomNumber = dataService.GetRandomNumber();
-        Log.Add($"   [TestHandler.UserCreateCommand] Processing Id: {ctx.Request}, Number: {randomNumber}");
+        //var randomNumber = 1; // dataService.GetRandomNumber();
+        //Log.Add($"   [TestHandler.UserCreateCommand] Processing Id: {ctx.Request}, Number: {randomNumber}");
 
-        var result = new UserCreateResponse($"{ctx.Request.Email}_{ctx.Request.Name}_{Random.Shared.Next(1, 100)}");
-        return ValueTask.FromResult(result);
+        //var result = new UserCreateResponse($"{ctx.Request.Email}_{ctx.Request.Name}_{Random.Shared.Next(1, 100)}");
+        return ValueTask.FromResult(res);
     }
 
 
     //[Handle(Name = "Handle2")]
-    public ValueTask<UserCreateResponse> Handle2(HandlerContext<UserCreateCommand> ctx)
-    {
-        var randomNumber = dataService.GetRandomNumber();
-        Log.Add($"   [TestHandler.UserCreateCommand] Processing Id: {ctx.Request}, Number: {randomNumber}");
+    //public ValueTask<UserCreateResponse> Handle2(HandlerContext<UserCreateCommand> ctx)
+    //{
+    //    var randomNumber = dataService.GetRandomNumber();
+    //    Log.Add($"   [TestHandler.UserCreateCommand] Processing Id: {ctx.Request}, Number: {randomNumber}");
 
-        var result = new UserCreateResponse($"{ctx.Request.Email}_{ctx.Request.Name}_{Random.Shared.Next(1, 100)}");
-        return ValueTask.FromResult(result);
-    }
+    //    var result = new UserCreateResponse($"{ctx.Request.Email}_{ctx.Request.Name}_{Random.Shared.Next(1, 100)}");
+    //    return ValueTask.FromResult(result);
+    //}
 
     //[Pipeline(Order = 1)]
-    public async ValueTask<UserCreateResponse> HandlePipeline(PipelineContext<UserCreateCommand> ctx, PipelineDelegate<UserCreateCommand, UserCreateResponse> next)
-    {
-        Log.Add($"   [HandlePipeline1] Processing Id: {ctx.Request} BEFORE");
+    //public async ValueTask<UserCreateResponse> HandlePipeline(PipelineContext<UserCreateCommand> ctx, PipelineDelegate<UserCreateCommand, UserCreateResponse> next)
+    //{
+    //    Log.Add($"   [HandlePipeline1] Processing Id: {ctx.Request} BEFORE");
 
-        var val = await next(ctx);
+    //    var val = await next(ctx);
 
-        Log.Add($"   [HandlePipeline1] Processing Id: {ctx.Request} AFTER");
+    //    Log.Add($"   [HandlePipeline1] Processing Id: {ctx.Request} AFTER");
 
-        return val;
-    }
+    //    return val;
+    //}
 
     //[Pipeline(Order = 2)]
     //public async ValueTask<Nothing> HandlePipeline2(PipelineContext<int> ctx, PipelineDelegate<int, Nothing> next)

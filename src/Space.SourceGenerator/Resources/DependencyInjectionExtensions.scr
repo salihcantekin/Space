@@ -3,6 +3,7 @@
 // </auto-generated>
 
 using System;
+using System.Threading.Tasks;
 using Space.Abstraction;
 using Space.Abstraction.Context;
 using Space.Abstraction.Registry;
@@ -15,82 +16,92 @@ namespace Space.DependencyInjection
     public static class SourceGeneratorDependencyInjectionExtensions
     {
         public static IServiceCollection AddSpaceSourceGenerated(this IServiceCollection services)
-        {
-            return AddSpaceInternal(services, new SpaceOptions());
-        }
+            => AddSpaceInternal(services, new SpaceOptions());
 
-        public static IServiceCollection AddSpaceSourceGenerated(this IServiceCollection services, Action<SpaceOptions> options)
+        public static IServiceCollection AddSpaceSourceGenerated(this IServiceCollection services, Action<SpaceOptions> configure)
         {
-            var SpaceOptions = new SpaceOptions();
-            options?.Invoke(SpaceOptions);
-            return AddSpaceInternal(services, SpaceOptions);
+            var opt = new SpaceOptions();
+            configure?.Invoke(opt);
+            return AddSpaceInternal(services, opt);
         }
 
         private static IServiceCollection AddSpaceInternal(IServiceCollection services, SpaceOptions options)
         {
-            services.AddSingleton<ISpace, global::Space.DependencyInjection.Space>();
+            // Core registrations
+            services.AddScoped<ISpace, global::Space.DependencyInjection.Space>();
             services.AddSingleton<ModuleFactory>();
-
             if (options.NotificationDispatchType == NotificationDispatchType.Parallel)
                 services.AddSingleton<INotificationDispatcher, ParallelNotificationDispatcher>();
             else
                 services.AddSingleton<INotificationDispatcher, SequentialNotificationDispatcher>();
 
-            {{ for handler in AllHandlersName }}
-            services.Add(new ServiceDescriptor(typeof({{ handler }}), typeof({{ handler }}), options.ServiceLifetime));
-            {{ end }}
+            // Batch register handler types (trailing comma style to avoid loop.last logic)
+            var handlerTypes = new Type[] {
+                {{ for handler in AllHandlersName }}
+                typeof({{ handler }}),
+                {{ end }}
+            };
+            foreach (var t in handlerTypes)
+                services.Add(new ServiceDescriptor(t, t, options.ServiceLifetime));
 
             services.AddSingleton<SpaceRegistry>(sp =>
             {
                 var registry = new SpaceRegistry(sp);
+                bool isSingleton = options.ServiceLifetime == ServiceLifetime.Singleton;
 
-                // Notification Registry
-                {{ for handler in Notifications }}
-                registry.RegisterNotification<{{ handler.RequestParameterTypeName }}>((ctx) =>
+                // Small helper to convert Task<T> -> ValueTask<T> efficiently when needed
+                static ValueTask<T> VT<T>(Task<T> task) => task.IsCompletedSuccessfully ? new ValueTask<T>(task.Result) : new ValueTask<T>(task);
+
+                // Generic handler registration helper
+                void Reg<THandler, TReq, TRes>(string name, Func<THandler, HandlerContext<TReq>, ValueTask<TRes>> body)
                 {
-                    var handler = ctx.ServiceProvider.GetRequiredService<{{ handler.ClassFullName }}>();
-                    return handler.{{ handler.MethodName }}(ctx);
-                }, "{{ handler.HandlerName }}");
+                    THandler singleton = isSingleton ? sp.GetRequiredService<THandler>() : default!;
+                    registry.RegisterHandler<TReq, TRes>(ctx =>
+                    {
+                        var inst = isSingleton ? singleton : ctx.ServiceProvider.GetRequiredService<THandler>();
+                        return body(inst, ctx);
+                    }, name);
+                }
+
+                // Generic pipeline registration helper
+                void RegPipe<TReq, TRes, TPipe>(string handlerName, PipelineConfig cfg, Func<TPipe, PipelineContext<TReq>, PipelineDelegate<TReq, TRes>, ValueTask<TRes>> invoker)
+                {
+                    registry.RegisterPipeline<TReq, TRes>(handlerName, cfg, (ctx, next) =>
+                    {
+                        var pipe = ctx.ServiceProvider.GetRequiredService<TPipe>();
+                        return invoker(pipe, ctx, next);
+                    });
+                }
+
+                // Generic module registration helper
+                void RegModule<TReq, TRes>(string handlerName, string moduleName)
+                {
+                    registry.RegisterModule<TReq, TRes>(moduleName, handlerName);
+                }
+
+                // Notifications
+                {{ for n in Notifications }}
+                registry.RegisterNotification<{{ n.RequestParameterTypeName }}>((ctx) =>
+                {
+                    var h = ctx.ServiceProvider.GetRequiredService<{{ n.ClassFullName }}>();
+                    return h.{{ n.MethodName }}(ctx);
+                }, "{{ n.HandlerName }}");
                 {{ end }}
 
-                // Handler Registry
-                {{ for handler in Handlers }}
-                
-                    registry.RegisterHandler<{{ handler.RequestParameterTypeName }}, {{ handler.ReturnTypeName }}>(
-                    handler: (ctx) =>
-                    {
-                        var handler = sp.GetRequiredService<{{ handler.ClassFullName }}>();
-                        {{~ if handler.IsValueTask ~}}
-                        return handler.{{ handler.MethodName }}(ctx);
-                        {{~ else ~}}
-                        return new ValueTask<{{ handler.ReturnTypeName }}>(handler.{{ handler.MethodName }}(ctx));
-                        {{~ end ~}}
-                    },
-                    name: "{{ handler.HandlerName }}");
+                // Handlers / Pipelines / Modules
+                {{ for h in Handlers }}
+                Reg<{{ h.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}",
+                    (inst, ctx) => {{ if h.IsValueTask }} inst.{{ h.MethodName }}(ctx) {{ else }} VT(inst.{{ h.MethodName }}(ctx)) {{ end }});
 
-                    {{ for pipelineModel in handler.PipelineCompileModels }}
-                        registry.RegisterPipeline<{{ handler.RequestParameterTypeName }}, {{ handler.ReturnTypeName }}>("{{ handler.HandlerName }}", 
-                            new PipelineConfig()
-                            {
-                                {{ for property in pipelineModel.Properties }}
-                                {{ property.Key }} = {{ property.Value }},
-                                {{ end }}
-                            },
-                            (ctx, next) =>
-                            {
-                                var pipeline = sp.GetRequiredService<{{ pipelineModel.ClassFullName }}>();
-                                {{~ if pipelineModel.IsValueTask ~}}
-                                return pipeline.{{ pipelineModel.MethodName }}(ctx, next);
-                                {{~ else ~}}
-                                return new ValueTask<{{ handler.ReturnTypeName }}>(pipeline.{{ pipelineModel.MethodName }}(ctx, next));
-                                {{~ end ~}}
-                            });
+                    {{ for p in h.PipelineCompileModels }}
+                    RegPipe<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}, {{ p.ClassFullName }}>("{{ h.HandlerName }}",
+                        new PipelineConfig(){ {{ for prop in p.Properties }} {{ prop.Key }} = {{ prop.Value }},{{ end }} },
+                        (pipe, ctx, next) => {{ if p.IsValueTask }} pipe.{{ p.MethodName }}(ctx, next) {{ else }} VT(pipe.{{ p.MethodName }}(ctx, next)) {{ end }});
                     {{ end }}
 
-                    {{ for moduleModel in handler.ModuleCompileModels }}
-                        registry.RegisterModule<{{ handler.RequestParameterTypeName }}, {{ handler.ReturnTypeName }}>("{{ moduleModel.ModuleName }}", "{{ handler.HandlerName }}");
+                    {{ for m in h.ModuleCompileModels }}
+                    RegModule<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}", "{{ m.ModuleName }}");
                     {{ end }}
-
                 {{ end }}
 
                 registry.CompleteRegistration();

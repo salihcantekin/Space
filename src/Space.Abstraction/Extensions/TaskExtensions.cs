@@ -5,39 +5,71 @@ namespace Space.Abstraction.Extensions;
 
 public static class TaskExtensions
 {
-    public static async ValueTask<object> AwaitAndReturnHandlerObject<TRequest>(this ValueTask<object> task, HandlerContext<TRequest> ctx)
+    public static ValueTask<object> AwaitAndReturnHandlerObject<TRequest>(this ValueTask<object> task, HandlerContext<TRequest> ctx)
     {
-        try
+        if (task.IsCompletedSuccessfully)
         {
-            return await task;
-        }
-        finally
-        {
+            var res = task.Result;
             HandlerContextPool<TRequest>.Return(ctx);
+            return new ValueTask<object>(res);
+        }
+
+        return Await(task, ctx);
+
+        static async ValueTask<object> Await(ValueTask<object> t, HandlerContext<TRequest> c)
+        {
+            try { return await t; }
+            finally { HandlerContextPool<TRequest>.Return(c); }
         }
     }
 
-    public static async ValueTask<TResponse> AwaitAndReturnHanderInvoke<TRequest, TResponse>(this ValueTask<TResponse> task, HandlerContext<TRequest> ctx)
+    public static ValueTask<TResponse> AwaitAndReturnHanderInvoke<TRequest, TResponse>(this ValueTask<TResponse> task, HandlerContext<TRequest> ctx)
     {
-        try
+        if (task.IsCompletedSuccessfully)
         {
-            return await task;
-        }
-        finally
-        {
+            var res = task.Result;
             HandlerContextPool<TRequest>.Return(ctx);
+            return new ValueTask<TResponse>(res);
+        }
+        return Await(task, ctx);
+
+        static async ValueTask<TResponse> Await(ValueTask<TResponse> t, HandlerContext<TRequest> c)
+        {
+            try { return await t; }
+            finally { HandlerContextPool<TRequest>.Return(c); }
         }
     }
 
-    public static async ValueTask AwaitAndReturnNotificationInvoke<TRequest>(this ValueTask task, NotificationContext<TRequest> ctx)
+    public static ValueTask AwaitAndReturnNotificationInvoke<TRequest>(this ValueTask task, NotificationContext<TRequest> ctx)
     {
-        try
-        {
-            await task;
-        }
-        finally
+        if (task.IsCompletedSuccessfully)
         {
             NotificationContextPool<TRequest>.Return(ctx);
+            return new ValueTask();
+        }
+        return Await(task, ctx);
+
+        static async ValueTask Await(ValueTask t, NotificationContext<TRequest> c)
+        {
+            try { await t; }
+            finally { NotificationContextPool<TRequest>.Return(c); }
+        }
+    }
+
+    public static ValueTask<TResponse> AwaitAndReturnPipelineInvoke<TRequest, TResponse>(this ValueTask<TResponse> task, PipelineContext<TRequest> ctx)
+    {
+        if (task.IsCompletedSuccessfully)
+        {
+            var res = task.Result;
+            PipelineContextPool<TRequest>.Return(ctx);
+            return new ValueTask<TResponse>(res);
+        }
+        return Await(task, ctx);
+
+        static async ValueTask<TResponse> Await(ValueTask<TResponse> t, PipelineContext<TRequest> c)
+        {
+            try { return await t; }
+            finally { PipelineContextPool<TRequest>.Return(c); }
         }
     }
 
@@ -45,11 +77,15 @@ public static class TaskExtensions
     {
         if (task.IsCompletedSuccessfully)
         {
-            return new ValueTask<object>(task.Result);
+            return new ValueTask<object>(task.Result!);
         }
 
-        return new ValueTask<object>(task.AsTask()
-                                         .ContinueWith(t => Unsafe.As<object>(t.Result),
-                                                            TaskScheduler.Default));
+        return Await(task);
+
+        static async ValueTask<object> Await(ValueTask<TResponse> t)
+        {
+            var res = await t; // boxed once when returning as object
+            return Unsafe.As<object>(res);
+        }
     }
 }

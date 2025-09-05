@@ -23,6 +23,8 @@ public class PipelineContext<TRequest> : BaseContext<TRequest>, IDisposable
         this.CancellationToken = cancellationToken;
         this.ServiceProvider = serviceProvider;
         this.Space = space;
+
+        base.Reset();
     }
 
     public static PipelineContext<TRequest> Create(TRequest request, IServiceProvider serviceProvider, ISpace space, CancellationToken cancellationToken)
