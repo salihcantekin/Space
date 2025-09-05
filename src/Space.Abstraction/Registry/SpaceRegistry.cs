@@ -17,7 +17,7 @@ public partial class SpaceRegistry
     private readonly ModuleFactory moduleFactory;
 
     // Records the lifetime used when registering handlers (set by DI generator)
-    public ServiceLifetime HandlerLifetime { get; internal set; } = ServiceLifetime.Scoped;
+    public ServiceLifetime HandlerLifetime { get; set; } = ServiceLifetime.Scoped;
 
     public SpaceRegistry(IServiceProvider serviceProvider)
     {
@@ -40,9 +40,10 @@ public partial class SpaceRegistry
     public void RegisterHandler<TRequest, TResponse>(
         HandlerInvoker<TRequest, TResponse> handler,
         string name = "",
-        IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelines = null)
+        IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelines = null,
+        LightHandlerInvoker<TRequest, TResponse> lightInvoker = null)
     {
-        handlerRegistry.RegisterHandler(handler, name, pipelines);
+        handlerRegistry.RegisterHandler(handler, name, pipelines, lightInvoker);
     }
 
     public void RegisterModule<TRequest, TResponse>(string moduleName, string handlerName = "")
@@ -62,7 +63,7 @@ public partial class SpaceRegistry
 
     // Lightweight handler entry access for fast path
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool TryGetHandlerEntry<TRequest, TResponse>(string name, out HandlerEntry<TRequest, TResponse> entry)
+    internal bool TryGetHandlerEntry<TRequest, TResponse>(string name, out HandlerEntry<TRequest, TResponse> entry)
         => handlerRegistry.TryGetHandlerEntry<TRequest, TResponse>(name, out entry);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

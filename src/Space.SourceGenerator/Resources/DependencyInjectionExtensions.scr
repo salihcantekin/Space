@@ -15,6 +15,26 @@ namespace Space.DependencyInjection
 {
     public static class SourceGeneratorDependencyInjectionExtensions
     {
+        // Generic light invoker state holder (allocation-free after first use per TReq per thread)
+        internal static class LightInvokerState<TReq, THandler, TRes>
+        {
+            [ThreadStatic] private static HandlerContext<TReq> _ctx;
+            public static ValueTask<TRes> Invoke(in LightHandlerContext<TReq> lctx, THandler singleton, bool isSingleton,
+                                                 IServiceProvider rootSp,
+                                                 Func<THandler, HandlerContext<TReq>, ValueTask<TRes>> body)
+            {
+                var ctx = _ctx;
+                if (ctx == null)
+                {
+                    ctx = new HandlerContext<TReq>();
+                    _ctx = ctx;
+                }
+                ctx.Initialize(lctx.Request, lctx.ServiceProvider, lctx.Space, lctx.CancellationToken);
+                var inst = isSingleton ? singleton : ctx.ServiceProvider.GetRequiredService<THandler>();
+                return body(inst, ctx);
+            }
+        }
+
         public static IServiceCollection AddSpaceSourceGenerated(this IServiceCollection services)
             => AddSpaceInternal(services, new SpaceOptions());
 
@@ -47,23 +67,37 @@ namespace Space.DependencyInjection
             services.AddSingleton<SpaceRegistry>(sp =>
             {
                 var registry = new SpaceRegistry(sp);
+                registry.HandlerLifetime = options.ServiceLifetime;
                 bool isSingleton = options.ServiceLifetime == ServiceLifetime.Singleton;
 
-                // Small helper to convert Task<T> -> ValueTask<T> efficiently when needed
                 static ValueTask<T> VT<T>(Task<T> task) => task.IsCompletedSuccessfully ? new ValueTask<T>(task.Result) : new ValueTask<T>(task);
 
-                // Generic handler registration helper
-                void Reg<THandler, TReq, TRes>(string name, Func<THandler, HandlerContext<TReq>, ValueTask<TRes>> body)
+                void Reg<THandler, TReq, TRes>(string name, Func<THandler, HandlerContext<TReq>, ValueTask<TRes>> body,
+                                                System.Collections.Generic.IEnumerable<(PipelineConfig config, PipelineInvoker<TReq, TRes> invoker)> pipes = null)
                 {
                     THandler singleton = isSingleton ? sp.GetRequiredService<THandler>() : default!;
                     registry.RegisterHandler<TReq, TRes>(ctx =>
                     {
                         var inst = isSingleton ? singleton : ctx.ServiceProvider.GetRequiredService<THandler>();
                         return body(inst, ctx);
-                    }, name);
+                    }, name, pipes, null);
                 }
 
-                // Generic pipeline registration helper
+                void RegLight<THandler, TReq, TRes>(string name, Func<THandler, HandlerContext<TReq>, ValueTask<TRes>> body)
+                {
+                    THandler singleton = isSingleton ? sp.GetRequiredService<THandler>() : default!;
+                    HandlerInvoker<TReq, TRes> normal = ctx =>
+                    {
+                        var inst = isSingleton ? singleton : ctx.ServiceProvider.GetRequiredService<THandler>();
+                        return body(inst, ctx);
+                    };
+
+                    LightHandlerInvoker<TReq, TRes> light = (in LightHandlerContext<TReq> lctx) =>
+                        LightInvokerState<TReq, THandler, TRes>.Invoke(in lctx, singleton, isSingleton, sp, body);
+
+                    registry.RegisterHandler<TReq, TRes>(normal, name, null, light);
+                }
+
                 void RegPipe<TReq, TRes, TPipe>(string handlerName, PipelineConfig cfg, Func<TPipe, PipelineContext<TReq>, PipelineDelegate<TReq, TRes>, ValueTask<TRes>> invoker)
                 {
                     registry.RegisterPipeline<TReq, TRes>(handlerName, cfg, (ctx, next) =>
@@ -73,7 +107,6 @@ namespace Space.DependencyInjection
                     });
                 }
 
-                // Generic module registration helper
                 void RegModule<TReq, TRes>(string handlerName, string moduleName)
                 {
                     registry.RegisterModule<TReq, TRes>(moduleName, handlerName);
@@ -90,6 +123,15 @@ namespace Space.DependencyInjection
 
                 // Handlers / Pipelines / Modules
                 {{ for h in Handlers }}
+                {{ hasPipe = false }}
+                {{ for _p in h.PipelineCompileModels }}{{ hasPipe = true }}{{ break }}{{ end }}
+                {{ hasModule = false }}
+                {{ for _m in h.ModuleCompileModels }}{{ hasModule = true }}{{ break }}{{ end }}
+                {{ if !hasPipe && !hasModule }}
+                // Light path (no pipelines/modules)
+                RegLight<{{ h.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}",
+                    (inst, ctx) => {{ if h.IsValueTask }} inst.{{ h.MethodName }}(ctx) {{ else }} VT(inst.{{ h.MethodName }}(ctx)) {{ end }});
+                {{ else }}
                 Reg<{{ h.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}",
                     (inst, ctx) => {{ if h.IsValueTask }} inst.{{ h.MethodName }}(ctx) {{ else }} VT(inst.{{ h.MethodName }}(ctx)) {{ end }});
 
@@ -102,6 +144,7 @@ namespace Space.DependencyInjection
                     {{ for m in h.ModuleCompileModels }}
                     RegModule<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}", "{{ m.ModuleName }}");
                     {{ end }}
+                {{ end }}
                 {{ end }}
 
                 registry.CompleteRegistration();

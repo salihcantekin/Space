@@ -13,6 +13,15 @@ using System.Reflection;
 BenchmarkRunner.Run<Bench>();
 return;
 
+var services = new ServiceCollection();
+services.AddSpace(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
+
+var sp = services.BuildServiceProvider();
+var space = sp.GetRequiredService<ISpace>();
+var res = await space.Send<CommandResponse>(new Request(2));
+
+Console.WriteLine("Res: " + res);
+
 [SimpleJob]
 [MemoryDiagnoser]
 public class Bench
@@ -30,6 +39,7 @@ public class Bench
     {
         var services = new ServiceCollection();
         services.AddSpace(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
+        services.AddSpaceSourceGenerated(opt => { opt.ServiceLifetime = ServiceLifetime.Singleton; });
         var sp = services.BuildServiceProvider();
         space = sp.GetRequiredService<ISpace>();
 

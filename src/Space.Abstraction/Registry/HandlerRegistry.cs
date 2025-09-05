@@ -21,13 +21,14 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
     public void RegisterHandler<TRequest, TResponse>(
         HandlerInvoker<TRequest, TResponse> invoker,
         string name = "",
-        IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelines = null)
+        IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelines = null,
+        LightHandlerInvoker<TRequest, TResponse> lightInvoker = null)
     {
         if (isSealed)
             throw new InvalidOperationException("Registration is sealed. No more handlers can be registered.");
 
         var key = SpaceRegistry.GenerateKey<TRequest>(name);
-        var entry = new SpaceRegistry.HandlerEntry<TRequest, TResponse>(invoker, pipelines);
+        var entry = new SpaceRegistry.HandlerEntry<TRequest, TResponse>(invoker, lightInvoker, pipelines);
 
         handlerMap[key] = entry;
         handlerMapByType[typeof(TRequest)] = entry;
@@ -60,7 +61,7 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
         }
     }
 
-    public bool TryGetHandlerEntry<TRequest, TResponse>(string name, out SpaceRegistry.HandlerEntry<TRequest, TResponse> entry)
+    internal bool TryGetHandlerEntry<TRequest, TResponse>(string name, out SpaceRegistry.HandlerEntry<TRequest, TResponse> entry)
     {
         entry = null;
         if (!isSealed) return false;

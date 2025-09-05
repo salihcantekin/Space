@@ -1,4 +1,5 @@
 ﻿using Space.Abstraction.Extensions;
+using Space.Abstraction.Context;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,25 +10,19 @@ using System.Threading.Tasks;
 namespace Space.Abstraction.Registry;
 
 public delegate ValueTask<TResponse> HandlerInvoker<TRequest, TResponse>(HandlerContext<TRequest> ctx);
+public delegate ValueTask<TResponse> LightHandlerInvoker<TRequest, TResponse>(in LightHandlerContext<TRequest> lctx);
 public delegate ValueTask<TResponse> PipelineInvoker<TRequest, TResponse>(PipelineContext<TRequest> ctx, PipelineDelegate<TRequest, TResponse> next);
 
 public partial class SpaceRegistry
 {
-    public interface ILightHandlerEntryInvoker
+    internal sealed class HandlerEntry<TRequest, TResponse>
+        : IObjectHandlerEntry
     {
-        ValueTask<TResponse> InvokeLight<TRequest, TResponse>(IServiceProvider sp, ISpace space, TRequest request, CancellationToken ct);
-        bool SupportsLight(string name);
-    }
-
-    public sealed class HandlerEntry<TRequest, TResponse>(
-        HandlerInvoker<TRequest, TResponse> handlerInvoker,
-        IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelineInvokers) : IObjectHandlerEntry
-    {
-        private readonly List<PipelineContainer> pipelines = pipelineInvokers != null
-            ? [.. pipelineInvokers.Select(p => new PipelineContainer(p.config, p.invoker))]
-            : [];
-
-        private readonly bool hasPipelines = pipelineInvokers != null && pipelineInvokers.Any();
+        private readonly HandlerInvoker<TRequest, TResponse> handlerInvoker;
+        private readonly LightHandlerInvoker<TRequest, TResponse> lightInvoker;
+        private readonly List<PipelineContainer> pipelines;
+        private readonly bool hasPipelines;
+        private readonly bool hasLight; // initialized in ctor
 
         private readonly object composeLock = new();
         private PipelineContainer[] orderedPipelines; // cached ordered list
@@ -35,17 +30,29 @@ public partial class SpaceRegistry
         private bool compositionDirty = true;
         private static readonly object HandlerContextItemKey = new();
 
-        // Thread-static reusable context for pipeline-less fast path
-        [ThreadStatic]
-        private static HandlerContext<TRequest> tsContext;
-
-        private sealed class PipelineContainer(PipelineConfig pipelineConfig, PipelineInvoker<TRequest, TResponse> invoker)
+        private sealed class PipelineContainer
         {
-            internal PipelineConfig Config { get; } = pipelineConfig;
-            internal PipelineInvoker<TRequest, TResponse> Invoker { get; } = invoker;
+            internal PipelineConfig Config { get; }
+            internal PipelineInvoker<TRequest, TResponse> Invoker { get; }
+            internal PipelineContainer(PipelineConfig pipelineConfig, PipelineInvoker<TRequest, TResponse> invoker)
+            { Config = pipelineConfig; Invoker = invoker; }
         }
 
-        public bool IsPipelineFree => !hasPipelines;
+        internal bool IsPipelineFree => !hasPipelines;
+        internal bool HasLightInvoker => hasLight;
+
+        internal HandlerEntry(HandlerInvoker<TRequest, TResponse> handlerInvoker,
+                              LightHandlerInvoker<TRequest, TResponse> lightInvoker,
+                              IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelineInvokers)
+        {
+            this.handlerInvoker = handlerInvoker;
+            this.lightInvoker = lightInvoker;
+            pipelines = pipelineInvokers != null
+                ? new List<PipelineContainer>(pipelineInvokers.Select(p => new PipelineContainer(p.config, p.invoker)))
+                : new List<PipelineContainer>();
+            hasPipelines = pipelines.Count > 0;
+            hasLight = lightInvoker != null && !hasPipelines;
+        }
 
         internal void AddPipeline(PipelineInvoker<TRequest, TResponse> invoker, PipelineConfig pipelineConfig)
         {
@@ -83,14 +90,12 @@ public partial class SpaceRegistry
                 {
                     var ordered = GetOrdered();
 
-                    // Terminal delegate obtains HandlerContext from Items to stay re-usable across invocations
                     PipelineDelegate<TRequest, TResponse> root = pc =>
                     {
                         var hc = (HandlerContext<TRequest>)pc.GetItem(HandlerContextItemKey);
                         return handlerInvoker(hc);
                     };
 
-                    // Compose in reverse order once
                     for (int i = ordered.Length - 1; i >= 0; i--)
                     {
                         var current = ordered[i];
@@ -105,18 +110,18 @@ public partial class SpaceRegistry
             }
         }
 
-        // Fast light invocation without allocating a context (reuses a thread-static instance)
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ValueTask<TResponse> InvokeLight(IServiceProvider sp, ISpace space, TRequest request, CancellationToken ct)
+        internal ValueTask<TResponse> InvokeLight(IServiceProvider sp, ISpace space, TRequest request, CancellationToken ct)
         {
-            var ctx = tsContext;
-            if (ctx == null)
+            if (!hasLight)
             {
-                ctx = new HandlerContext<TRequest>();
-                tsContext = ctx; // retain for reuse
+                // fallback allocate context path
+                var ctxAlloc = HandlerContext<TRequest>.Create(sp, request, ct);
+                var vtAlloc = handlerInvoker(ctxAlloc).AwaitAndReturnHanderInvoke(ctxAlloc);
+                return vtAlloc;
             }
-            ctx.Initialize(request, sp, space, ct);
-            return handlerInvoker(ctx);
+            var lctx = new LightHandlerContext<TRequest>(request, sp, space, ct);
+            return lightInvoker(in lctx);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -126,7 +131,6 @@ public partial class SpaceRegistry
 
             if (!hasPipelines)
             {
-                // direct fast path
                 return handlerInvoker(handlerContext);
             }
 
@@ -138,7 +142,6 @@ public partial class SpaceRegistry
             var vt = cachedRootDelegate(pipelineContext);
             if (vt.IsCompletedSuccessfully)
             {
-                // cleanup quickly when completed
                 PipelineContextPool<TRequest>.Return(pipelineContext);
                 return vt;
             }
@@ -147,31 +150,34 @@ public partial class SpaceRegistry
 
         public ValueTask<object> InvokeObject(HandlerContextStruct handlerContext)
         {
-            // Fast path: no pipelines -> use thread-static context reuse
+            if (hasLight)
+            {
+                var vtLight = InvokeLight(handlerContext.ServiceProvider, handlerContext.Space, (TRequest)handlerContext.Request, handlerContext.CancellationToken);
+                if (vtLight.IsCompletedSuccessfully)
+                {
+                    return new ValueTask<object>(vtLight.Result!);
+                }
+                return AwaitLight(vtLight);
+
+                static async ValueTask<object> AwaitLight(ValueTask<TResponse> t)
+                {
+                    var r = await t; return (object)r!; }
+            }
+
             if (!hasPipelines)
             {
-                var ctxFast = tsContext;
-                if (ctxFast == null)
-                {
-                    ctxFast = new HandlerContext<TRequest>();
-                    tsContext = ctxFast;
-                }
-                ctxFast.Initialize((TRequest)handlerContext.Request, handlerContext.ServiceProvider, handlerContext.Space, handlerContext.CancellationToken);
+                var ctxFast = HandlerContext<TRequest>.Create(handlerContext);
                 var vtFast = handlerInvoker(ctxFast);
                 if (vtFast.IsCompletedSuccessfully)
                 {
+                    HandlerContextPool<TRequest>.Return(ctxFast);
                     return new ValueTask<object>(vtFast.Result!);
                 }
-                return AwaitFast(vtFast);
-
-                static async ValueTask<object> AwaitFast(ValueTask<TResponse> t)
-                {
-                    var r = await t;
-                    return (object)r!;
-                }
+                return AwaitFast(vtFast, ctxFast);
+                static async ValueTask<object> AwaitFast(ValueTask<TResponse> t, HandlerContext<TRequest> c)
+                { try { return (object)await t; } finally { HandlerContextPool<TRequest>.Return(c); } }
             }
 
-            // Pipelines path: allocate/pool context normally
             var ctx = HandlerContext<TRequest>.Create(handlerContext);
             var vt = Invoke(ctx);
             if (vt.IsCompletedSuccessfully)
@@ -183,10 +189,7 @@ public partial class SpaceRegistry
             return Await(vt, ctx);
 
             static async ValueTask<object> Await(ValueTask<TResponse> t, HandlerContext<TRequest> c)
-            {
-                try { return (object)await t; }
-                finally { HandlerContextPool<TRequest>.Return(c); }
-            }
+            { try { return (object)await t; } finally { HandlerContextPool<TRequest>.Return(c); } }
         }
     }
 }
