@@ -22,7 +22,9 @@ public class NotificationTests
         services.AddSpace(opt =>
         {
             opt.NotificationDispatchType = NotificationDispatchType.Sequential;
+            opt.ServiceLifetime = ServiceLifetime.Singleton;
         });
+
         sp = services.BuildServiceProvider();
         Space = sp.GetRequiredService<ISpace>();
         notificatonHandler = sp.GetRequiredService<NotificationHandlers>();
@@ -119,7 +121,9 @@ public class NotificationTests
         services.AddSpace(opt =>
         {
             opt.NotificationDispatchType = NotificationDispatchType.Parallel;
+            opt.ServiceLifetime = ServiceLifetime.Singleton;
         });
+
         using var provider = services.BuildServiceProvider();
         var SpaceParallel = provider.GetRequiredService<ISpace>();
         var parallelHandlers = provider.GetRequiredService<NotificationHandlers>();

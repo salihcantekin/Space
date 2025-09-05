@@ -21,11 +21,11 @@ public class HandleTests
 
         [Handle]
         public virtual ValueTask<int> Handle_int_int(HandlerContext<int> ctx)
-            => HandleIntFunc != null ? HandleIntFunc(ctx) : ValueTask.FromResult(0);
+            => HandleIntFunc != null ? HandleIntFunc(ctx) : ValueTask.FromResult(10);
 
         [Handle(Name = "This_is_handle_name")]
         public virtual ValueTask<HandleWithNameResponse> Handle_WithName(HandlerContext<HandleWithNameRequest> ctx)
-            => HandleWithNameFunc != null ? HandleWithNameFunc(ctx) : ValueTask.FromResult(new HandleWithNameResponse(Guid.Empty));
+            => HandleWithNameFunc != null ? HandleWithNameFunc(ctx) : ValueTask.FromResult(new HandleWithNameResponse(Guid.NewGuid()));
 
         [Handle]
         public virtual Task<string> Handle_ForPipeline(HandlerContext<string> ctx)

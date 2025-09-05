@@ -13,6 +13,8 @@ public class NotificationContext<TRequest> : BaseContext<TRequest>, IDisposable
         ServiceProvider = serviceProvider;
         Space = space;
         CancellationToken = cancellationToken;
+
+        base.Reset();
     }
 
     public static NotificationContext<TRequest> Create(HandlerContextStruct handlerContext)

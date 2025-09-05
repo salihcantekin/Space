@@ -35,7 +35,7 @@ public class PipelineTests
     private PipelineHandler GetHandlerClass()
     {
         var services = new ServiceCollection();
-        services.AddSpace();
+        services.AddSpace(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
         var sp = services.BuildServiceProvider();
         Space = sp.GetRequiredService<ISpace>();
         return sp.GetRequiredService<PipelineHandler>();
