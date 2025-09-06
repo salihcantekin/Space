@@ -13,6 +13,7 @@ public class NotificationAttributeRule : IDiagnosticRule
     public bool Analyze(SourceProductionContext context, Compilation compilation, HandlersCompileWrapperModel _)
     {
         bool hasErrors = false;
+
         foreach (var tree in compilation.SyntaxTrees)
         {
             var semanticModel = compilation.GetSemanticModel(tree);
@@ -21,7 +22,9 @@ public class NotificationAttributeRule : IDiagnosticRule
             foreach (var classNode in classNodes)
             {
                 if (semanticModel.GetDeclaredSymbol(classNode) is not INamedTypeSymbol classSymbol)
+                {
                     continue;
+                }
 
                 var notificationHandlers = classSymbol.Interfaces
                     .Where(i => i.Name == SourceGenConstants.Contracts.INotificationHandler && i.TypeArguments.Length == 1);
@@ -31,10 +34,14 @@ public class NotificationAttributeRule : IDiagnosticRule
                     foreach (var methodNode in classNode.DescendantNodes().OfType<MethodDeclarationSyntax>())
                     {
                         if (semanticModel.GetDeclaredSymbol(methodNode) is not IMethodSymbol methodSymbol)
+                        {
                             continue;
+                        }
 
                         if (methodSymbol.Name != SourceGenConstants.Contracts.NotificationMethodName)
+                        {
                             continue;
+                        }
 
                         // Rule 1: Must have exactly one parameter
                         if (methodSymbol.Parameters.Length != 1)
@@ -70,6 +77,7 @@ public class NotificationAttributeRule : IDiagnosticRule
                 }
             }
         }
+
         return hasErrors;
     }
 
@@ -78,6 +86,7 @@ public class NotificationAttributeRule : IDiagnosticRule
         var diagnostic = Diagnostic.Create(
             new DiagnosticDescriptor(id, "Invalid Notification Method Signature", message, "Usage", DiagnosticSeverity.Error, true),
             methodNode.GetLocation());
+
         context.ReportDiagnostic(diagnostic);
     }
 }

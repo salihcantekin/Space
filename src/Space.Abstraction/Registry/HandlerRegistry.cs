@@ -25,7 +25,9 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
         LightHandlerInvoker<TRequest, TResponse> lightInvoker = null)
     {
         if (isSealed)
+        {
             throw new InvalidOperationException("Registration is sealed. No more handlers can be registered.");
+        }
 
         var key = SpaceRegistry.GenerateKey<TRequest, TResponse>(name);
         var entry = new SpaceRegistry.HandlerEntry<TRequest, TResponse>(invoker, lightInvoker, pipelines);
@@ -38,7 +40,9 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
         PipelineInvoker<TRequest, TResponse> pipelineInvoker)
     {
         if (isSealed)
+        {
             throw new InvalidOperationException("Registration is sealed. No more pipelines can be registered.");
+        }
 
         var key = SpaceRegistry.GenerateKey<TRequest, TResponse>(handlerName);
 
@@ -64,36 +68,70 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
     internal bool TryGetHandlerEntry<TRequest, TResponse>(string name, out SpaceRegistry.HandlerEntry<TRequest, TResponse> entry)
     {
         entry = null;
-        if (!isSealed) return false;
+
+        if (!isSealed)
+        {
+            return false;
+        }
+
         var key = SpaceRegistry.GenerateKey<TRequest, TResponse>(name);
+
         if (readOnlyHandlerMap != null && readOnlyHandlerMap.TryGetValue(key, out var obj) && obj is SpaceRegistry.HandlerEntry<TRequest, TResponse> he)
-        { entry = he; return true; }
+        {
+            entry = he;
+
+            return true;
+        }
+
         if (string.IsNullOrEmpty(name) && readOnlyHandlerMapByType != null && readOnlyHandlerMapByType.TryGetValue((typeof(TRequest), typeof(TResponse)), out var byType) && byType is SpaceRegistry.HandlerEntry<TRequest, TResponse> he2)
-        { entry = he2; return true; }
+        {
+            entry = he2;
+
+            return true;
+        }
+
         return false;
     }
 
     internal bool TryGetHandlerEntryByRuntimeType(Type requestType, Type responseType, string name, out object entryObj)
     {
         entryObj = null;
-        if (!isSealed) return false;
+
+        if (!isSealed)
+        {
+            return false;
+        }
+
         if (string.IsNullOrEmpty(name))
         {
             if (readOnlyHandlerMapByType != null && readOnlyHandlerMapByType.TryGetValue((requestType, responseType), out var direct))
-            { entryObj = direct; return true; }
+            {
+                entryObj = direct;
+
+                return true;
+            }
         }
         else if (readOnlyHandlerMap != null && readOnlyHandlerMap.TryGetValue((requestType, name, responseType), out var named))
-        { entryObj = named; return true; }
+        {
+            entryObj = named;
+
+            return true;
+        }
+
         return false;
     }
 
     public ValueTask<TResponse> DispatchHandler<TRequest, TResponse>(IServiceProvider execProvider, HandlerContext<TRequest> ctx, string name = "")
     {
         if (!isSealed)
+        {
             throw new InvalidOperationException("Registration is not sealed. Call CompleteRegistration() before dispatching.");
+        }
 
         var key = SpaceRegistry.GenerateKey<TRequest, TResponse>(name);
 
+        // Micro-optimization: cache ISpace instance once per registry and also expose it statically.
+        // This avoids repeated IServiceProvider lookups during hot-path dispatch.
         space ??= execProvider.GetService<ISpace>();
         Space ??= space;
 
@@ -122,18 +160,26 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
     public ValueTask<TResponse> DispatchHandler<TRequest, TResponse>(object request, string name, IServiceProvider executionProvider, CancellationToken ct = default)
     {
         if (request is not TRequest typed)
+        {
             throw new InvalidOperationException($"Request type mismatch. Expected {typeof(TRequest)}, got {request?.GetType()}");
+        }
+
         var ctx = HandlerContext<TRequest>.Create(executionProvider, typed, ct);
+
         return DispatchHandler<TRequest, TResponse>(executionProvider, ctx, name);
     }
 
     private ValueTask<object> DispatchHandlerInternal(object request, string name, Type responseType, IServiceProvider execProvider, CancellationToken ct)
     {
         if (!isSealed)
+        {
             throw new InvalidOperationException("Registration is not sealed. Call CompleteRegistration() before dispatching.");
+        }
 
         var type = request.GetType();
 
+        // Micro-optimization: cache ISpace instance once per registry and also expose it statically.
+        // This avoids repeated IServiceProvider lookups during hot-path dispatch.
         space ??= execProvider.GetService<ISpace>();
         Space ??= space;
 
@@ -145,33 +191,50 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
                 if (readOnlyHandlerMapByType.TryGetValue((type, responseType), out var handlerObjRt) && handlerObjRt is SpaceRegistry.IObjectHandlerEntry objectHandlerRt)
                 {
                     var ctx = HandlerContextStruct.Create(execProvider, request, space, ct);
+
                     return objectHandlerRt.InvokeObject(ctx);
                 }
+
                 throw new InvalidOperationException($"Handler not found for type {type} -> {responseType}");
             }
             else if (readOnlyHandlerMapByType.TryGetValue((type, typeof(object)), out var objHandler) && objHandler is SpaceRegistry.IObjectHandlerEntry objectHandler)
             {
                 var ctx = HandlerContextStruct.Create(execProvider, request, space, ct);
+
                 return objectHandler.InvokeObject(ctx);
             }
             else
             {
                 // Fallback: try to find a single entry for the request type when response type is unknown
+                // Micro-optimization: linear scan is only executed on rare ambiguous paths, avoiding dictionary allocations.
                 if (readOnlyHandlerMapByType != null)
                 {
                     // enumerate to detect single candidate
-                    int found = 0; SpaceRegistry.IObjectHandlerEntry last = null;
+                    int found = 0;
+                    SpaceRegistry.IObjectHandlerEntry last = null;
+
                     foreach (var kv in readOnlyHandlerMapByType)
                     {
                         if (kv.Key.Item1 == type && kv.Value is SpaceRegistry.IObjectHandlerEntry entry)
-                        { found++; last = entry; if (found > 1) break; }
+                        {
+                            found++;
+                            last = entry;
+
+                            if (found > 1)
+                            {
+                                break;
+                            }
+                        }
                     }
+
                     if (found == 1)
                     {
                         var ctx = HandlerContextStruct.Create(execProvider, request, space, ct);
+
                         return last.InvokeObject(ctx);
                     }
                 }
+
                 throw new InvalidOperationException($"Handler not found for type {type}");
             }
         }
@@ -181,8 +244,10 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
             if (readOnlyHandlerMap.TryGetValue((type, name, responseType), out var handlerObj2) && handlerObj2 is SpaceRegistry.IObjectHandlerEntry objectHandler2)
             {
                 var ctx = HandlerContextStruct.Create(execProvider, request, space, ct);
+
                 return objectHandler2.InvokeObject(ctx);
             }
+
             throw new InvalidOperationException($"Handler not found for type {type} -> {responseType} and name '{name}'");
         }
         else
@@ -193,6 +258,7 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
                 if (kv.Key.Item1 == type && kv.Key.Item2 == (name ?? string.Empty) && kv.Value is SpaceRegistry.IObjectHandlerEntry oh)
                 {
                     var ctx = HandlerContextStruct.Create(execProvider, request, space, ct);
+
                     return oh.InvokeObject(ctx);
                 }
             }

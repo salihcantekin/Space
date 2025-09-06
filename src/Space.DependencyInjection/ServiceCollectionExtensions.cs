@@ -24,7 +24,9 @@ public static class ServiceCollectionExtensions
             .ToArray();
 
         if (spaceAssemblies.Length == 0)
+        {
             throw new SpaceAssemblyLoadException("No Space.* assemblies loaded. Ensure packages are referenced before calling AddSpace().");
+        }
 
         var allTypes = spaceAssemblies.SelectMany(SafeGetTypes).ToArray();
 
@@ -51,6 +53,7 @@ public static class ServiceCollectionExtensions
             .FirstOrDefault(t => t is not null);
 
         MethodInfo method = null;
+
         if (generatedType is not null)
         {
             method = SelectBestMethod(generatedType, methodName, allowConfigure);
@@ -66,9 +69,12 @@ public static class ServiceCollectionExtensions
                 typeof(IServiceCollection).IsAssignableFrom(m.GetParameters()[0].ParameterType));
 
         if (method is null)
+        {
             throw new SpaceGeneratedMethodNotFoundException(methodName, generatedTypeName);
+        }
 
         var parameters = method.GetParameters();
+
         object[] callArgs = parameters.Length switch
         {
             1 => new object[] { services },
@@ -86,9 +92,23 @@ public static class ServiceCollectionExtensions
         .FirstOrDefault(m =>
         {
             var ps = m.GetParameters();
-            if (ps.Length == 0) return false;
-            if (!typeof(IServiceCollection).IsAssignableFrom(ps[0].ParameterType)) return false;
-            if (ps.Length == 2 && !allowConfigure) return false; // ignore overload with configure if not allowed
+
+            if (ps.Length == 0)
+            {
+                return false;
+            }
+
+            if (!typeof(IServiceCollection).IsAssignableFrom(ps[0].ParameterType))
+            {
+                return false;
+            }
+
+            if (ps.Length == 2 && !allowConfigure)
+            {
+                // Ignore overload with configure if not allowed
+                return false;
+            }
+
             return true;
         });
     #endregion
@@ -96,7 +116,11 @@ public static class ServiceCollectionExtensions
     #region Assembly Loading
     private static void EnsureSpaceAssembliesLoaded()
     {
-        if (_assembliesLoaded) return;
+        if (_assembliesLoaded)
+        {
+            return;
+        }
+
         LoadSpaceAssemblies();
         _assembliesLoaded = true;
     }
@@ -114,11 +138,15 @@ public static class ServiceCollectionExtensions
 
         foreach (var an in referenced)
         {
-            if (!IsLoaded(an.Name)) TryLoad(() => Assembly.Load(an));
+            if (!IsLoaded(an.Name))
+            {
+                TryLoad(() => Assembly.Load(an));
+            }
         }
 
         // Load Space*.dll from base directory
         var baseDir = AppContext.BaseDirectory;
+
         if (Directory.Exists(baseDir))
         {
             foreach (var path in Directory.EnumerateFiles(baseDir, "Space*.dll", SearchOption.TopDirectoryOnly))
@@ -126,9 +154,16 @@ public static class ServiceCollectionExtensions
                 try
                 {
                     var asmName = AssemblyName.GetAssemblyName(path);
-                    if (!IsLoaded(asmName.Name)) TryLoad(() => Assembly.Load(asmName));
+
+                    if (!IsLoaded(asmName.Name))
+                    {
+                        TryLoad(() => Assembly.Load(asmName));
+                    }
                 }
-                catch { /* ignore */ }
+                catch
+                {
+                    /* ignore */
+                }
             }
         }
     }
@@ -137,14 +172,29 @@ public static class ServiceCollectionExtensions
     #region Utilities
     private static IEnumerable<Type> SafeGetTypes(Assembly assembly)
     {
-        try { return assembly.GetTypes(); }
-        catch (ReflectionTypeLoadException ex) { return ex.Types.Where(t => t is not null)!; }
-        catch { return Array.Empty<Type>(); }
+        try
+        {
+            return assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            return ex.Types.Where(t => t is not null)!;
+        }
+        catch
+        {
+            return Array.Empty<Type>();
+        }
     }
 
     private static void TryLoad(Action load)
     {
-        try { load(); } catch { }
+        try
+        {
+            load();
+        }
+        catch
+        {
+        }
     }
     #endregion
 
@@ -156,10 +206,17 @@ public static class ServiceCollectionExtensions
 
         foreach (var moduleType in moduleTypes)
         {
-            if (!Attribute.IsDefined(moduleType, typeof(SpaceModuleAttribute))) continue;
+            if (!Attribute.IsDefined(moduleType, typeof(SpaceModuleAttribute)))
+            {
+                continue;
+            }
 
             var attribute = moduleType.GetCustomAttribute<SpaceModuleAttribute>();
-            if (attribute?.IsEnabled != true) continue;
+
+            if (attribute?.IsEnabled != true)
+            {
+                continue;
+            }
 
             var moduleAttributeName = attribute.ModuleAttributeType.Name;
             services.AddKeyedSingleton(serviceKey: moduleAttributeName, implementationInstance: moduleType);
