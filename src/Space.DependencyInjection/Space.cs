@@ -148,7 +148,7 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         {
             using var scope = scopeFactory.CreateScope();
             if (token.IsCancellationRequested) return await ValueTask.FromCanceled<TRes>(token);
-            var result = await spaceRegistry.DispatchHandler(req, handlerName, scope.ServiceProvider, token);
+            var result = await spaceRegistry.DispatchHandler(req, handlerName, typeof(TRes), scope.ServiceProvider, token);
             return (TRes)result!;
         }
     }
@@ -198,7 +198,7 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         async ValueTask SlowPublishScoped(TRequest req, string handlerName, CancellationToken token)
         {
             using var scope = scopeFactory.CreateScope();
-            if (token.IsCancellationRequested) return; // after scope create – acceptable edge
+            if (token.IsCancellationRequested) return; // after scope create  acceptable edge
             var ctx = NotificationContext<TRequest>.Create(scope.ServiceProvider, req, token);
             var vt = spaceRegistry.DispatchNotification(ctx, handlerName).AwaitAndReturnNotificationInvoke(ctx);
             if (!vt.IsCompletedSuccessfully) await vt;
