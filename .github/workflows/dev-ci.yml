@@ -1,16 +1,16 @@
 name: Dev CI (Preview Publish)
 
 on:
-  push:
-    branches:
-      - dev
+  release:
+    types: [published]
 
 concurrency:
   group: dev-ci
   cancel-in-progress: true
 
 jobs:
-  dev-ci:
+  dev-preview:
+    if: ${{ github.event.release.prerelease == true }}
     runs-on: ubuntu-latest
     env:
       DOTNET_NOLOGO: true
@@ -28,21 +28,37 @@ jobs:
             8.x
             9.x
 
-      - name: Restore
-        run: dotnet restore
-
-      - name: Resolve Preview Version
+      - name: Set Preview Version from Release Tag
         id: version
         shell: bash
         run: |
           set -euo pipefail
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.1.0")
-          BASE=${LAST_TAG#v}
-          IFS='.' read -r MA MI PA <<<"$BASE"
-          NEXT_PATCH=$((PA+1))
-          PREVIEW="${MA}.${MI}.${NEXT_PATCH}-preview.${GITHUB_RUN_NUMBER}+sha.$(git rev-parse --short HEAD)"
-          echo "Resolved preview version: $PREVIEW"
-          echo "VERSION=$PREVIEW" >> $GITHUB_ENV
+          RAW_TAG="${{ github.event.release.tag_name }}"
+          if [[ -z "$RAW_TAG" ]]; then
+            echo "Release tag name is empty" >&2
+            exit 1
+          fi
+          # Normalize possible inputs (e.g., refs/tags/v1.0.0, v1.0.0, 1.0.0)
+          TAG=$(echo -n "$RAW_TAG" | tr -d '[:space:]')
+          TAG=${TAG#refs/tags/}
+          TAG=${TAG#tags/}
+          # Strip a single leading v or V
+          if [[ "$TAG" =~ ^[vV]([0-9].*)$ ]]; then
+            BASE_VERSION="${BASH_REMATCH[1]}"
+          else
+            BASE_VERSION="$TAG"
+          fi
+          # Basic SemVer (allow pre-release/build metadata)
+          if [[ ! "$BASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+].*)?$ ]]; then
+            echo "Tag '$RAW_TAG' produced invalid base version '$BASE_VERSION'. Expected '1.2.3' or 'v1.2.3'." >&2
+            exit 1
+          fi
+          PREVIEW_VERSION="${BASE_VERSION}-preview"
+          echo "Using preview version: $PREVIEW_VERSION from tag: $RAW_TAG"
+          echo "VERSION=$PREVIEW_VERSION" >> $GITHUB_ENV
+
+      - name: Restore
+        run: dotnet restore
 
       - name: Build (Release)
         run: dotnet build -c Release --no-restore -p:Version=${VERSION}

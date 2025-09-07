@@ -13,6 +13,7 @@ internal class DiagnosticGenerator
         // Handler rules
         new HandleAttributeRule(),
         new MissingHandlerAttributeRule(),
+        new MultipleDefaultHandleRule(),
 
         // Notification rules
         new MissingNotificationAttributeRule(),

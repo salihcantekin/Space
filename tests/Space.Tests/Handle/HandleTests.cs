@@ -32,6 +32,21 @@ public class HandleTests
             => HandleForPipelineFunc != null ? HandleForPipelineFunc(ctx) : Task.FromResult(string.Empty);
     }
 
+    // Additional types for default handler selection tests
+    public record DefaultReq(int Id);
+    public record DefaultRes(string Tag);
+
+    public class DefaultSelectionHandlers
+    {
+        [Handle(Name = "A")]
+        public ValueTask<DefaultRes> H1(HandlerContext<DefaultReq> ctx)
+            => ValueTask.FromResult(new DefaultRes("A"));
+
+        [Handle(Name = "B", IsDefault = true)]
+        public ValueTask<DefaultRes> H2(HandlerContext<DefaultReq> ctx)
+            => ValueTask.FromResult(new DefaultRes("B-default"));
+    }
+
     private static ServiceProvider sp;
     private static TestHandler handler;
     private static ISpace Space;
@@ -153,5 +168,42 @@ public class HandleTests
         Assert.IsNotNull(res);
         Assert.IsInstanceOfType<HandleWithNameResponse>(res);
         Assert.IsTrue(res.Id != Guid.Empty);
+    }
+
+    [TestMethod]
+    public async Task Send_WithoutName_Uses_IsDefault_Handler_When_Multiple_Exist()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSpace();
+        var spLocal = services.BuildServiceProvider();
+        var spaceLocal = spLocal.GetRequiredService<ISpace>();
+        _ = spLocal.GetRequiredService<DefaultSelectionHandlers>();
+
+        // Act
+        var res = await spaceLocal.Send<DefaultReq, DefaultRes>(new DefaultReq(1));
+
+        // Assert
+        Assert.IsNotNull(res);
+        Assert.AreEqual("B-default", res.Tag);
+    }
+
+    [TestMethod]
+    public async Task Send_WithName_Selects_Specified_Handler_Even_If_Default_Exists()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSpace();
+        var spLocal = services.BuildServiceProvider();
+        var spaceLocal = spLocal.GetRequiredService<ISpace>();
+        _ = spLocal.GetRequiredService<DefaultSelectionHandlers>();
+
+        // Act
+        var resA = await spaceLocal.Send<DefaultReq, DefaultRes>(new DefaultReq(2), name: "A");
+        var resB = await spaceLocal.Send<DefaultReq, DefaultRes>(new DefaultReq(3), name: "B");
+
+        // Assert
+        Assert.AreEqual("A", resA.Tag);
+        Assert.AreEqual("B-default", resB.Tag);
     }
 }

@@ -9,6 +9,6 @@ public sealed class SequentialNotificationDispatcher : INotificationDispatcher
     public async ValueTask DispatchAsync<TRequest>(IEnumerable<Func<NotificationContext<TRequest>, ValueTask>> handlers, NotificationContext<TRequest> ctx)
     {
         foreach (var handler in handlers)
-            await handler(ctx);
+            await handler(ctx).ConfigureAwait(false);
     }
 }

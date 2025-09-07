@@ -24,6 +24,12 @@ public class ModuleConfig(string moduleName) : BaseConfig, IModuleConfig
     public T GetModuleProperty<T>(string key)
     {
         var value = GetModuleProperty(key);
+
+        if (value == null)
+        {
+            return default;
+        }
+
         return (T)Convert.ChangeType(value, typeof(T));
     }
 

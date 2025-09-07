@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Runtime.CompilerServices;
 
 namespace Space.Abstraction.Context;
 
@@ -17,6 +19,71 @@ public class PipelineContext<TRequest> : BaseContext<TRequest>, IDisposable
 
     public int Order { get; set; } = 100;
 
+    // Items are pipeline-specific
+    private ItemsHolder itemsHolder;
+
+    private sealed class ItemsHolder
+    {
+        internal object Key;
+        internal object Value;
+        internal Dictionary<object, object> Dict; // created on second add
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal object Get(object key)
+        {
+            if (Dict != null)
+                return Dict.TryGetValue(key, out var v) ? v : null;
+
+            if (Key != null && Equals(Key, key))
+                return Value;
+
+            return null;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void Set(object key, object value)
+        {
+            if (Dict != null)
+            {
+                Dict[key] = value; return;
+            }
+
+            if (Key == null)
+            {
+                Key = key; Value = value;
+                return;
+            }
+
+            // second item -> upgrade
+            Dict = new Dictionary<object, object>(2)
+            {
+                { Key, Value },
+                { key, value }
+            };
+
+            Key = null; 
+            Value = null;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void Clear()
+        {
+            Key = null; 
+            Value = null; 
+            Dict?.Clear(); 
+            Dict = null;
+        }
+    }
+
+    public object GetItem(object key) => itemsHolder?.Get(key);
+
+    public void SetItem(object key, object value)
+    {
+        (itemsHolder ??= new ItemsHolder()).Set(key, value);
+    }
+
+    internal void ClearItems() => itemsHolder?.Clear();
+
     public void Initialize(TRequest request, IServiceProvider serviceProvider, ISpace space, CancellationToken cancellationToken)
     {
         this.Request = request;
@@ -24,7 +91,7 @@ public class PipelineContext<TRequest> : BaseContext<TRequest>, IDisposable
         this.ServiceProvider = serviceProvider;
         this.Space = space;
 
-        base.Reset();
+        ClearItems();
     }
 
     public static PipelineContext<TRequest> Create(TRequest request, IServiceProvider serviceProvider, ISpace space, CancellationToken cancellationToken)

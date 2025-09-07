@@ -1,9 +1,8 @@
 name: Prod CI (Stable Publish)
 
 on:
-  push:
-    branches:
-      - master
+  release:
+    types: [published]
 
 concurrency:
   group: prod-ci
@@ -11,6 +10,7 @@ concurrency:
 
 jobs:
   prod-ci:
+    if: ${{ github.event.release.prerelease == false }}
     runs-on: ubuntu-latest
     env:
       DOTNET_NOLOGO: true
@@ -28,20 +28,33 @@ jobs:
             8.x
             9.x
 
-      - name: Ensure Tag @ HEAD
-        id: tag
+      - name: Set Release Version
+        id: version
         shell: bash
         run: |
           set -euo pipefail
-          if git describe --tags --exact-match >/dev/null 2>&1; then
-            TAG=$(git describe --tags --exact-match)
-            echo "Found tag: $TAG"
-            VERSION=${TAG#v}
-            echo "VERSION=$VERSION" >> $GITHUB_ENV
-          else
-            echo "No exact tag at HEAD. Create a vX.Y.Z tag before pushing to master." >&2
+          RAW_TAG="${{ github.event.release.tag_name }}"
+          if [[ -z "$RAW_TAG" ]]; then
+            echo "Release tag name is empty" >&2
             exit 1
           fi
+          # Normalize possible inputs (e.g., refs/tags/v1.0.0, v1.0.0, 1.0.0)
+          TAG=$(echo -n "$RAW_TAG" | tr -d '[:space:]')
+          TAG=${TAG#refs/tags/}
+          TAG=${TAG#tags/}
+          # Strip a single leading v or V
+          if [[ "$TAG" =~ ^[vV]([0-9].*)$ ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+          else
+            VERSION="$TAG"
+          fi
+          # Basic SemVer (allow pre-release/build metadata)
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+].*)?$ ]]; then
+            echo "Tag '$RAW_TAG' produced invalid version '$VERSION'. Expected '1.2.3' or 'v1.2.3' (pre-release/build allowed)." >&2
+            exit 1
+          fi
+          echo "Using version: $VERSION from tag: $RAW_TAG"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Restore
         run: dotnet restore

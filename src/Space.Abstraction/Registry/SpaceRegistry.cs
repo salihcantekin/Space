@@ -52,6 +52,7 @@ public partial class SpaceRegistry
         var masterClass = serviceProvider.GetService(moduleType);
 
         int order = 0;
+
         if (masterClass is SpaceModule module)
         {
             order = module.PipelineOrder;
@@ -68,8 +69,8 @@ public partial class SpaceRegistry
 
     // Expose wrapper for runtime type handler entry lookup to optimize object Send path
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal bool TryGetHandlerEntryByRuntimeType(Type requestType, string name, out object entryObj)
-        => handlerRegistry.TryGetHandlerEntryByRuntimeType(requestType, name, out entryObj);
+    internal bool TryGetHandlerEntryByRuntimeType(Type requestType, Type responseType, string name, out object entryObj)
+        => handlerRegistry.TryGetHandlerEntryByRuntimeType(requestType, responseType, name, out entryObj);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ValueTask<TResponse> DispatchHandler<TRequest, TResponse>(IServiceProvider execProvider, HandlerContext<TRequest> ctx, string name = "")
@@ -86,6 +87,11 @@ public partial class SpaceRegistry
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ValueTask<object> DispatchHandler(object request, string name, IServiceProvider execProvider, CancellationToken ct = default)
         => handlerRegistry.DispatchHandler(request, name, execProvider, ct);
+
+    // New overload for object dispatch that includes response type for unique resolution
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal ValueTask<object> DispatchHandler(object request, string name, Type responseType, IServiceProvider execProvider, CancellationToken ct = default)
+        => handlerRegistry.DispatchHandler(request, name, responseType, execProvider, ct);
 
     public void RegisterNotification<TRequest>(Func<NotificationContext<TRequest>, ValueTask> handler, string name = "")
         => notificationRegistry.RegisterNotification(handler, name);
@@ -116,6 +122,13 @@ public partial class SpaceRegistry
 
     internal static (Type, string) GenerateKey<TRequest>(string name = null)
         => GenerateKey(typeof(TRequest), name);
+
+    // New overloads including response type for handler uniqueness
+    internal static (Type, string, Type) GenerateKey(Type requestType, string name, Type responseType)
+        => (requestType, name ?? string.Empty, responseType);
+
+    internal static (Type, string, Type) GenerateKey<TRequest, TResponse>(string name = null)
+        => GenerateKey(typeof(TRequest), name, typeof(TResponse));
 
     internal static SpaceRegistry CurrentRegistry; // for fast object dispatch
 }

@@ -33,7 +33,10 @@ public partial class SpaceRegistry
             internal PipelineConfig Config { get; }
             internal PipelineInvoker<TRequest, TResponse> Invoker { get; }
             internal PipelineContainer(PipelineConfig pipelineConfig, PipelineInvoker<TRequest, TResponse> invoker)
-            { Config = pipelineConfig; Invoker = invoker; }
+            {
+                Config = pipelineConfig;
+                Invoker = invoker;
+            }
         }
 
         internal bool IsPipelineFree => !hasPipelines;
@@ -46,9 +49,11 @@ public partial class SpaceRegistry
         {
             this.handlerInvoker = handlerInvoker;
             this.lightInvoker = lightInvoker;
+
             pipelines = pipelineInvokers != null
-                ? new List<PipelineContainer>(pipelineInvokers.Select(p => new PipelineContainer(p.config, p.invoker)))
-                : new List<PipelineContainer>();
+                ? [.. pipelineInvokers.Select(p => new PipelineContainer(p.config, p.invoker))]
+                : [];
+
             hasPipelines = pipelines.Count > 0;
         }
 
@@ -63,23 +68,31 @@ public partial class SpaceRegistry
         private PipelineContainer[] GetOrdered()
         {
             if (orderedPipelines != null)
+            {
                 return orderedPipelines;
+            }
+
             lock (composeLock)
             {
                 orderedPipelines ??= pipelines.OrderBy(p => p.Config.Order).ToArray();
             }
+
             return orderedPipelines;
         }
 
         private void EnsureComposed()
         {
             if (!compositionDirty)
+            {
                 return;
+            }
 
             lock (composeLock)
             {
                 if (!compositionDirty)
+                {
                     return;
+                }
 
                 if (!hasPipelines || pipelines.Count == 0)
                 {
@@ -92,6 +105,7 @@ public partial class SpaceRegistry
                     PipelineDelegate<TRequest, TResponse> root = pc =>
                     {
                         var hc = (HandlerContext<TRequest>)pc.GetItem(HandlerContextItemKey);
+
                         return handlerInvoker(hc);
                     };
 
@@ -122,6 +136,7 @@ public partial class SpaceRegistry
             }
 #endif
             var lctx = new LightHandlerContext<TRequest>(request, sp, space, ct);
+
             return lightInvoker(in lctx);
         }
 
@@ -141,11 +156,14 @@ public partial class SpaceRegistry
             pipelineContext.SetItem(HandlerContextItemKey, handlerContext);
 
             var vt = cachedRootDelegate(pipelineContext);
+
             if (vt.IsCompletedSuccessfully)
             {
                 PipelineContextPool<TRequest>.Return(pipelineContext);
+
                 return vt;
             }
+
             return vt.AwaitAndReturnPipelineInvoke(pipelineContext);
         }
 
@@ -154,37 +172,71 @@ public partial class SpaceRegistry
             if (HasLightInvoker)
             {
                 var vtLight = InvokeLight(handlerContext.ServiceProvider, handlerContext.Space, (TRequest)handlerContext.Request, handlerContext.CancellationToken);
+
                 if (vtLight.IsCompletedSuccessfully)
                 {
                     return new ValueTask<object>(vtLight.Result!);
                 }
+
                 return AwaitLight(vtLight);
-                static async ValueTask<object> AwaitLight(ValueTask<TResponse> t) { var r = await t; return (object)r!; }
+
+                static async ValueTask<object> AwaitLight(ValueTask<TResponse> t)
+                {
+                    var r = await t;
+
+                    return (object)r!;
+                }
             }
 
             if (!hasPipelines)
             {
                 var ctxFast = HandlerContext<TRequest>.Create(handlerContext);
                 var vtFast = handlerInvoker(ctxFast);
+
                 if (vtFast.IsCompletedSuccessfully)
                 {
                     HandlerContextPool<TRequest>.Return(ctxFast);
                     return new ValueTask<object>(vtFast.Result!);
                 }
+
                 return AwaitFast(vtFast, ctxFast);
-                static async ValueTask<object> AwaitFast(ValueTask<TResponse> t, HandlerContext<TRequest> c) { try { return (object)await t; } finally { HandlerContextPool<TRequest>.Return(c); } }
+                
+                static async ValueTask<object> AwaitFast(ValueTask<TResponse> t, HandlerContext<TRequest> c)
+                {
+                    try
+                    {
+                        return (object)await t;
+                    }
+                    finally
+                    {
+                        HandlerContextPool<TRequest>.Return(c);
+                    }
+                }
             }
 
             var ctx = HandlerContext<TRequest>.Create(handlerContext);
             var vt = Invoke(ctx);
+
             if (vt.IsCompletedSuccessfully)
             {
                 var result = (object)vt.Result!;
                 HandlerContextPool<TRequest>.Return(ctx);
                 return new ValueTask<object>(result);
             }
+
             return Await(vt, ctx);
-            static async ValueTask<object> Await(ValueTask<TResponse> t, HandlerContext<TRequest> c) { try { return (object)await t; } finally { HandlerContextPool<TRequest>.Return(c); } }
+            
+            static async ValueTask<object> Await(ValueTask<TResponse> t, HandlerContext<TRequest> c)
+            {
+                try
+                {
+                    return (object)await t;
+                }
+                finally
+                {
+                    HandlerContextPool<TRequest>.Return(c);
+                }
+            }
         }
     }
 }

@@ -10,6 +10,6 @@ public sealed class ParallelNotificationDispatcher : INotificationDispatcher
     public async ValueTask DispatchAsync<TRequest>(IEnumerable<Func<NotificationContext<TRequest>, ValueTask>> handlers, NotificationContext<TRequest> ctx)
     {
         var tasks = handlers.Select(handler => handler(ctx).AsTask());
-        await Task.WhenAll(tasks);
+        await Task.WhenAll(tasks).ConfigureAwait(false);
     }
 }
