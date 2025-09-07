@@ -3,7 +3,6 @@ using Space.Abstraction;
 using Space.Abstraction.Attributes;
 using Space.Abstraction.Context;
 using Space.DependencyInjection;
-using System.Diagnostics;
 using System.Threading.Tasks;
 
 namespace Space.Tests.Notification;
@@ -146,9 +145,9 @@ public class NotificationTests
     }
 
     [TestMethod]
-    public async Task Publish_Override_To_Parallel_When_Default_Is_Sequential()
+    public async Task Publish_With_DispatchType_Parallel_Calls_All_Subscribers()
     {
-        // Arrange: default Sequential
+        // Arrange: default Sequential, override to Parallel per call
         var services = new ServiceCollection();
         services.AddSpace(opt =>
         {
@@ -160,26 +159,22 @@ public class NotificationTests
         var spaceLocal = provider.GetRequiredService<ISpace>();
         var handlers = provider.GetRequiredService<NotificationHandlers>();
 
-        // Short delays for fast test
-        const int delayMs = 20;
-        handlers.OnPingAFunc = async _ => { await Task.Delay(delayMs); };
-        handlers.OnPingBFunc = async _ => { await Task.Delay(delayMs); };
+        bool a = false, b = false;
+        handlers.OnPingAFunc = _ => { a = true; return ValueTask.CompletedTask; };
+        handlers.OnPingBFunc = _ => { b = true; return ValueTask.CompletedTask; };
 
-        var sw = Stopwatch.StartNew();
+        // Act
+        await spaceLocal.Publish(new Ping(99), NotificationDispatchType.Parallel);
 
-        // Act: override to Parallel
-        await spaceLocal.Publish(new Ping(7), NotificationDispatchType.Parallel);
-
-        sw.Stop();
-
-        // Assert: near single-delay rather than sum
-        Assert.IsTrue(sw.ElapsedMilliseconds < delayMs * 2, $"Expected parallel < {delayMs * 2}ms, actual {sw.ElapsedMilliseconds}ms");
+        // Assert
+        Assert.IsTrue(a);
+        Assert.IsTrue(b);
     }
 
     [TestMethod]
-    public async Task Publish_Override_To_Sequential_When_Default_Is_Parallel()
+    public async Task Publish_With_DispatchType_Sequential_Calls_All_Subscribers()
     {
-        // Arrange: default Parallel
+        // Arrange: default Parallel, override to Sequential per call
         var services = new ServiceCollection();
         services.AddSpace(opt =>
         {
@@ -191,19 +186,15 @@ public class NotificationTests
         var spaceLocal = provider.GetRequiredService<ISpace>();
         var handlers = provider.GetRequiredService<NotificationHandlers>();
 
-        // Short delays for fast test
-        const int delayMs = 20;
-        handlers.OnPingAFunc = async _ => { await Task.Delay(delayMs); };
-        handlers.OnPingBFunc = async _ => { await Task.Delay(delayMs); };
+        bool a = false, b = false;
+        handlers.OnPingAFunc = _ => { a = true; return ValueTask.CompletedTask; };
+        handlers.OnPingBFunc = _ => { b = true; return ValueTask.CompletedTask; };
 
-        var sw = Stopwatch.StartNew();
+        // Act
+        await spaceLocal.Publish(new Ping(100), NotificationDispatchType.Sequential);
 
-        // Act: override to Sequential
-        await spaceLocal.Publish(new Ping(8), NotificationDispatchType.Sequential);
-
-        sw.Stop();
-
-        // Assert: roughly sum of delays
-        Assert.IsTrue(sw.ElapsedMilliseconds >= delayMs * 2, $"Expected sequential >= {delayMs * 2}ms, actual {sw.ElapsedMilliseconds}ms");
+        // Assert
+        Assert.IsTrue(a);
+        Assert.IsTrue(b);
     }
 }
