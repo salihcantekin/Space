@@ -13,7 +13,7 @@ public class ModuleFactory(IServiceProvider sp)
 
     public ModulePipelineWrapper<TRequest, TResponse> GetModule<TRequest, TResponse>(string moduleName)
     {
-        var masterClassType = sp.GetKeyedService<Type>(moduleName) ?? throw new SpaceModuleRegistrationMissisng(moduleName); // get master class type by module name
+        var masterClassType = sp.GetKeyedService<Type>(moduleName) ?? throw new SpaceModuleRegistrationMissingException(moduleName); // get master class type by module name
 
         var masterClass = moduleMasters.GetOrAdd(moduleName, _ =>
         {
