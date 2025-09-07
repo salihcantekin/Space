@@ -18,7 +18,7 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
 
     private static class ObjectEntryCache
     {
-        internal static readonly Dictionary<(Type, string), object> Fast = new();
+        internal static readonly Dictionary<(Type, string), object> Fast = [];
     }
 
     private static class GenericDispatcherCache<TRes>
