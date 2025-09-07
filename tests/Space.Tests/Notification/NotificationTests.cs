@@ -3,6 +3,8 @@ using Space.Abstraction;
 using Space.Abstraction.Attributes;
 using Space.Abstraction.Context;
 using Space.DependencyInjection;
+using System.Diagnostics;
+using System.Threading.Tasks;
 
 namespace Space.Tests.Notification;
 
@@ -40,7 +42,6 @@ public class NotificationTests
     public void TestInit()
     {
         notificatonHandler.OnIntFunc = null;
-        notificatonHandler.OnIntNamedFunc = null;
         notificatonHandler.OnPingAFunc = null;
         notificatonHandler.OnPingBFunc = null;
     }
@@ -48,7 +49,6 @@ public class NotificationTests
     public class NotificationHandlers
     {
         public Func<NotificationContext<int>, ValueTask> OnIntFunc;
-        public Func<NotificationContext<int>, ValueTask> OnIntNamedFunc;
         public Func<NotificationContext<Ping>, ValueTask> OnPingAFunc;
         public Func<NotificationContext<Ping>, ValueTask> OnPingBFunc;
 
@@ -56,15 +56,11 @@ public class NotificationTests
         public virtual ValueTask OnInt(NotificationContext<int> ctx)
             => OnIntFunc != null ? OnIntFunc(ctx) : ValueTask.CompletedTask;
 
-        [Notification(HandleName = "named")]
-        public virtual ValueTask OnIntNamed(NotificationContext<int> ctx)
-            => OnIntNamedFunc != null ? OnIntNamedFunc(ctx) : ValueTask.CompletedTask;
-
-        [Notification(HandleName = "A")]
+        [Notification]
         public virtual ValueTask OnPingA(NotificationContext<Ping> ctx)
             => OnPingAFunc != null ? OnPingAFunc(ctx) : ValueTask.CompletedTask;
 
-        [Notification(HandleName = "B")]
+        [Notification]
         public virtual ValueTask OnPingB(NotificationContext<Ping> ctx)
             => OnPingBFunc != null ? OnPingBFunc(ctx) : ValueTask.CompletedTask;
     }
@@ -92,25 +88,17 @@ public class NotificationTests
     }
 
     [TestMethod]
-    public async Task Publish_WithName_TargetsOnlyMatching_Func()
+    public async Task Publish_Dispatches_All_Int_Subscribers_Func()
     {
         // Arrange
-        bool namedCalled = false;
-        NotificationContext<int>? receivedCtx = null;
-        notificatonHandler.OnIntNamedFunc = ctx =>
-        {
-            namedCalled = true;
-            receivedCtx = ctx;
-            return ValueTask.CompletedTask;
-        };
+        bool called1 = false;
+        notificatonHandler.OnIntFunc = _ => { called1 = true; return ValueTask.CompletedTask; };
 
         // Act
-        await Space.Publish(5, name: "named");
+        await Space.Publish(42);
 
         // Assert
-        Assert.IsTrue(namedCalled);
-        Assert.IsNotNull(receivedCtx);
-        Assert.AreEqual(5, receivedCtx.Request);
+        Assert.IsTrue(called1);
     }
 
     [TestMethod]
@@ -155,5 +143,67 @@ public class NotificationTests
         Assert.IsNotNull(ctxB);
         Assert.AreEqual(1, ctxA.Request.Id);
         Assert.AreEqual(1, ctxB.Request.Id);
+    }
+
+    [TestMethod]
+    public async Task Publish_Override_To_Parallel_When_Default_Is_Sequential()
+    {
+        // Arrange: default Sequential
+        var services = new ServiceCollection();
+        services.AddSpace(opt =>
+        {
+            opt.NotificationDispatchType = NotificationDispatchType.Sequential;
+            opt.ServiceLifetime = ServiceLifetime.Singleton;
+        });
+
+        using var provider = services.BuildServiceProvider();
+        var spaceLocal = provider.GetRequiredService<ISpace>();
+        var handlers = provider.GetRequiredService<NotificationHandlers>();
+
+        // Short delays for fast test
+        const int delayMs = 20;
+        handlers.OnPingAFunc = async _ => { await Task.Delay(delayMs); };
+        handlers.OnPingBFunc = async _ => { await Task.Delay(delayMs); };
+
+        var sw = Stopwatch.StartNew();
+
+        // Act: override to Parallel
+        await spaceLocal.Publish(new Ping(7), NotificationDispatchType.Parallel);
+
+        sw.Stop();
+
+        // Assert: near single-delay rather than sum
+        Assert.IsTrue(sw.ElapsedMilliseconds < delayMs * 2, $"Expected parallel < {delayMs * 2}ms, actual {sw.ElapsedMilliseconds}ms");
+    }
+
+    [TestMethod]
+    public async Task Publish_Override_To_Sequential_When_Default_Is_Parallel()
+    {
+        // Arrange: default Parallel
+        var services = new ServiceCollection();
+        services.AddSpace(opt =>
+        {
+            opt.NotificationDispatchType = NotificationDispatchType.Parallel;
+            opt.ServiceLifetime = ServiceLifetime.Singleton;
+        });
+
+        using var provider = services.BuildServiceProvider();
+        var spaceLocal = provider.GetRequiredService<ISpace>();
+        var handlers = provider.GetRequiredService<NotificationHandlers>();
+
+        // Short delays for fast test
+        const int delayMs = 20;
+        handlers.OnPingAFunc = async _ => { await Task.Delay(delayMs); };
+        handlers.OnPingBFunc = async _ => { await Task.Delay(delayMs); };
+
+        var sw = Stopwatch.StartNew();
+
+        // Act: override to Sequential
+        await spaceLocal.Publish(new Ping(8), NotificationDispatchType.Sequential);
+
+        sw.Stop();
+
+        // Assert: roughly sum of delays
+        Assert.IsTrue(sw.ElapsedMilliseconds >= delayMs * 2, $"Expected sequential >= {delayMs * 2}ms, actual {sw.ElapsedMilliseconds}ms");
     }
 }

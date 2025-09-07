@@ -112,13 +112,13 @@ namespace Space.DependencyInjection
                     registry.RegisterModule<TReq, TRes>(moduleName, handlerName);
                 }
 
-                // Notifications
+                // Notifications (unnamed)
                 {{ for n in Notifications }}
                 registry.RegisterNotification<{{ n.RequestParameterTypeName }}>((ctx) =>
                 {
                     var h = ctx.ServiceProvider.GetRequiredService<{{ n.ClassFullName }}>();
                     return h.{{ n.MethodName }}(ctx);
-                }, "{{ n.HandlerName }}");
+                });
                 {{ end }}
 
                 // Handlers / Pipelines / Modules

@@ -1,6 +1,6 @@
 namespace Space.SourceGenerator.Compile;
 
-public record NotificationCompileModel(string HandlerName): BaseCompileModel
+public record NotificationCompileModel : BaseCompileModel
 {
     public override string ToString() => $"{ClassFullName}.{MethodName}";
 }
