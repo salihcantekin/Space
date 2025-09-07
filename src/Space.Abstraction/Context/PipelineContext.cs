@@ -75,9 +75,9 @@ public class PipelineContext<TRequest> : BaseContext<TRequest>, IDisposable
         }
     }
 
-    internal object GetItem(object key) => itemsHolder?.Get(key);
+    public object GetItem(object key) => itemsHolder?.Get(key);
 
-    internal void SetItem(object key, object value)
+    public void SetItem(object key, object value)
     {
         (itemsHolder ??= new ItemsHolder()).Set(key, value);
     }
