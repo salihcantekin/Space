@@ -31,7 +31,7 @@ public static class TaskExtensions
         }
     }
 
-    public static ValueTask<TResponse> AwaitAndReturnHanderInvoke<TRequest, TResponse>(this ValueTask<TResponse> task, HandlerContext<TRequest> ctx)
+    public static ValueTask<TResponse> AwaitAndReturnHandlerInvoke<TRequest, TResponse>(this ValueTask<TResponse> task, HandlerContext<TRequest> ctx)
     {
         // Micro-optimization: fast-path when the ValueTask already completed to avoid async state machine allocation.
         if (task.IsCompletedSuccessfully)

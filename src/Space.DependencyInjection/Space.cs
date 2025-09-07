@@ -49,7 +49,7 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
 
                 var ctxCached = HandlerContext<TRequest>.Create(rootProvider, request, ct);
 
-                return spaceRegistry.DispatchHandler<TRequest, TResponse>(rootProvider, ctxCached, name).AwaitAndReturnHanderInvoke(ctxCached);
+                return spaceRegistry.DispatchHandler<TRequest, TResponse>(rootProvider, ctxCached, name).AwaitAndReturnHandlerInvoke(ctxCached);
             }
 
             if (!EntryCache<TRequest, TResponse>.Initialized && spaceRegistry.TryGetHandlerEntry<TRequest, TResponse>(name, out var first))
@@ -62,12 +62,12 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
 
                 var ctxFirst = HandlerContext<TRequest>.Create(rootProvider, request, ct);
 
-                return spaceRegistry.DispatchHandler<TRequest, TResponse>(rootProvider, ctxFirst, name).AwaitAndReturnHanderInvoke(ctxFirst);
+                return spaceRegistry.DispatchHandler<TRequest, TResponse>(rootProvider, ctxFirst, name).AwaitAndReturnHandlerInvoke(ctxFirst);
             }
 
             var ctx = HandlerContext<TRequest>.Create(rootProvider, request, ct);
 
-            return spaceRegistry.DispatchHandler<TRequest, TResponse>(rootProvider, ctx, name).AwaitAndReturnHanderInvoke(ctx);
+            return spaceRegistry.DispatchHandler<TRequest, TResponse>(rootProvider, ctx, name).AwaitAndReturnHandlerInvoke(ctx);
         }
 
         // Scoped path
@@ -95,7 +95,8 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         }
 
         var scopedCtx = HandlerContext<TRequest>.Create(sp, request, ct);
-        var scopedVt = spaceRegistry.DispatchHandler<TRequest, TResponse>(sp, scopedCtx, name).AwaitAndReturnHanderInvoke(scopedCtx);
+
+        var scopedVt = spaceRegistry.DispatchHandler<TRequest, TResponse>(sp, scopedCtx, name).AwaitAndReturnHandlerInvoke(scopedCtx);
 
         if (scopedVt.IsCompletedSuccessfully)
         {
@@ -234,8 +235,8 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
             using var scope = scopeFactory.CreateScope();
 
             if (token.IsCancellationRequested) 
-                return; // after scope create  acceptable edge
-
+              return;
+            
             var ctx = NotificationContext<TRequest>.Create(scope.ServiceProvider, req, token);
             var vt = spaceRegistry.DispatchNotification(ctx, handlerName).AwaitAndReturnNotificationInvoke(ctx);
 
