@@ -148,20 +148,4 @@ public static class MethodSymbolExtensions
 
         return null;
     }
-
-    //private static readonly SymbolDisplayFormat GlobalFullFormat =
-    //    new SymbolDisplayFormat(
-    //        globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,                  // adds global::
-    //        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
-    //        genericsOptions:
-    //              SymbolDisplayGenericsOptions.IncludeTypeParameters
-    //            | SymbolDisplayGenericsOptions.IncludeVariance
-    //            | SymbolDisplayGenericsOptions.IncludeTypeConstraints,
-    //        miscellaneousOptions:
-    //              SymbolDisplayMiscellaneousOptions.UseSpecialTypes
-    //            | SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers
-    //    );
-
-    //internal static string ToGlobalDisplayString(this ISymbol symbol)
-    //    => symbol?.ToDisplayString(GlobalFullFormat) ?? string.Empty;
 }

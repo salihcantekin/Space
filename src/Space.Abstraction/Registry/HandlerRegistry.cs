@@ -163,7 +163,7 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
         {
             throw new InvalidOperationException($"Request type mismatch. Expected {typeof(TRequest)}, got {request?.GetType()}");
         }
-
+        
         var ctx = HandlerContext<TRequest>.Create(executionProvider, typed, ct);
 
         return DispatchHandler<TRequest, TResponse>(executionProvider, ctx, name);

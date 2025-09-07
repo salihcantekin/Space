@@ -12,7 +12,7 @@ public static class ServiceCollectionExtensions
     private const string GeneratedModulesType = "Space.DependencyInjection.SourceGeneratorModuleGenerationExtensions";
     private const string GeneratedModulesMethod = "AddSpaceModules";
 
-    private static bool _assembliesLoaded;
+    private static bool assembliesLoaded;
 
     public static IServiceCollection AddSpace(this IServiceCollection services, Action<SpaceOptions> configure = null)
     {
@@ -77,52 +77,56 @@ public static class ServiceCollectionExtensions
 
         object[] callArgs = parameters.Length switch
         {
-            1 => new object[] { services },
-            2 when allowConfigure => new object[] { services, configure },
-            _ => new object[] { services }
+            1 => [services],
+            2 when allowConfigure => [services, configure],
+            _ => [services]
         };
 
         method.Invoke(null, callArgs);
     }
 
-    private static MethodInfo SelectBestMethod(Type type, string name, bool allowConfigure) => type
-        .GetMethods(BindingFlags.Public | BindingFlags.Static)
-        .Where(m => m.Name == name)
-        .OrderByDescending(m => m.GetParameters().Length)
-        .FirstOrDefault(m =>
-        {
-            var ps = m.GetParameters();
+    private static MethodInfo SelectBestMethod(Type type, string name, bool allowConfigure)
+    {
+        return type
+                .GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .Where(m => m.Name == name)
+                .OrderByDescending(m => m.GetParameters().Length)
+                .FirstOrDefault(m =>
+                {
+                    var ps = m.GetParameters();
 
-            if (ps.Length == 0)
-            {
-                return false;
-            }
+                    if (ps.Length == 0)
+                    {
+                        return false;
+                    }
 
-            if (!typeof(IServiceCollection).IsAssignableFrom(ps[0].ParameterType))
-            {
-                return false;
-            }
+                    if (!typeof(IServiceCollection).IsAssignableFrom(ps[0].ParameterType))
+                    {
+                        return false;
+                    }
 
-            if (ps.Length == 2 && !allowConfigure)
-            {
-                // Ignore overload with configure if not allowed
-                return false;
-            }
+                    if (ps.Length == 2 && !allowConfigure)
+                    {
+                        // Ignore overload with configure if not allowed
+                        return false;
+                    }
 
-            return true;
-        });
+                    return true;
+                });
+    }
+
     #endregion
 
     #region Assembly Loading
     private static void EnsureSpaceAssembliesLoaded()
     {
-        if (_assembliesLoaded)
+        if (assembliesLoaded)
         {
             return;
         }
 
         LoadSpaceAssemblies();
-        _assembliesLoaded = true;
+        assembliesLoaded = true;
     }
 
     private static void LoadSpaceAssemblies()
@@ -182,7 +186,7 @@ public static class ServiceCollectionExtensions
         }
         catch
         {
-            return Array.Empty<Type>();
+            return [];
         }
     }
 

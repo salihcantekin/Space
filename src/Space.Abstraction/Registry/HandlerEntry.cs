@@ -49,9 +49,11 @@ public partial class SpaceRegistry
         {
             this.handlerInvoker = handlerInvoker;
             this.lightInvoker = lightInvoker;
+
             pipelines = pipelineInvokers != null
-                ? new List<PipelineContainer>(pipelineInvokers.Select(p => new PipelineContainer(p.config, p.invoker)))
-                : new List<PipelineContainer>();
+                ? [.. pipelineInvokers.Select(p => new PipelineContainer(p.config, p.invoker))]
+                : [];
+
             hasPipelines = pipelines.Count > 0;
         }
 
@@ -171,13 +173,13 @@ public partial class SpaceRegistry
             {
                 var vtLight = InvokeLight(handlerContext.ServiceProvider, handlerContext.Space, (TRequest)handlerContext.Request, handlerContext.CancellationToken);
 
-
                 if (vtLight.IsCompletedSuccessfully)
                 {
                     return new ValueTask<object>(vtLight.Result!);
                 }
 
                 return AwaitLight(vtLight);
+
                 static async ValueTask<object> AwaitLight(ValueTask<TResponse> t)
                 {
                     var r = await t;
@@ -190,12 +192,15 @@ public partial class SpaceRegistry
             {
                 var ctxFast = HandlerContext<TRequest>.Create(handlerContext);
                 var vtFast = handlerInvoker(ctxFast);
+
                 if (vtFast.IsCompletedSuccessfully)
                 {
                     HandlerContextPool<TRequest>.Return(ctxFast);
                     return new ValueTask<object>(vtFast.Result!);
                 }
+
                 return AwaitFast(vtFast, ctxFast);
+                
                 static async ValueTask<object> AwaitFast(ValueTask<TResponse> t, HandlerContext<TRequest> c)
                 {
                     try
@@ -211,13 +216,16 @@ public partial class SpaceRegistry
 
             var ctx = HandlerContext<TRequest>.Create(handlerContext);
             var vt = Invoke(ctx);
+
             if (vt.IsCompletedSuccessfully)
             {
                 var result = (object)vt.Result!;
                 HandlerContextPool<TRequest>.Return(ctx);
                 return new ValueTask<object>(result);
             }
+
             return Await(vt, ctx);
+            
             static async ValueTask<object> Await(ValueTask<TResponse> t, HandlerContext<TRequest> c)
             {
                 try
