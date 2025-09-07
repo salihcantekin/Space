@@ -97,7 +97,9 @@ public class HandlersCompileWrapperModel
 
             var moduleTypeMatch = moduleCompileModels
                 .Where(c => (c.ResponseType.Contains(handlerCompileModel.ReturnTypeName) || handlerCompileModel.ReturnTypeName.Contains(c.ResponseType)) &&
-                            c.RequestType == handlerCompileModel.RequestParameterTypeName);
+                            c.RequestType == handlerCompileModel.RequestParameterTypeName && 
+                            c.MethodName == handlerCompileModel.MethodName &&
+                            c.ClassFullName == handlerCompileModel.ClassFullName);
 
             handlerCompileModel.ModuleCompileModels = [.. moduleTypeMatch];
         }
