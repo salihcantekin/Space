@@ -32,12 +32,9 @@ internal static class NotificationScanner
         if (handleAttr is null)
             yield break;
 
-        // nameof(NotificationAttribute.HandlerName)
-        var handlerName = handleAttr.GetAttributeArgument("HandleName");
         var respType = GetHandlerRequestType(handleAttr, methodSymbol);
 
-        yield return new NotificationCompileModel(
-            HandlerName: handlerName)
+        yield return new NotificationCompileModel
         {
             ClassFullName = classSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
             MethodName = methodSymbol.Name,

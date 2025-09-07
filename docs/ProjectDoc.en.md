@@ -104,7 +104,12 @@ public class UserHandlersNotifications
 
 await space.Publish(new UserLoggedInSuccessfully("sc"));
 ```
-Dispatch strategy (Parallel / Sequential) is configured globally for now.
+Dispatch strategy (Parallel / Sequential) is configured globally. You can also override it per call:
+```csharp
+// Override globally configured strategy just for this call
+await space.Publish(new UserLoggedInSuccessfully("sc"), NotificationDispatchType.Parallel);
+await space.Publish(new UserLoggedInSuccessfully("sc"), NotificationDispatchType.Sequential);
+```
 
 ## 7. Modules (System Pipelines)
 Modules are system-provided pipeline layers triggered by decorating a handler method with a module attribute. Example: caching.
@@ -162,7 +167,6 @@ Module attributes do not define their own methods; they annotate existing `[Hand
 - Register module configs via the Options pattern so providers can access application-wide defaults.
 
 ## 11. Suggestions (Future)
-- Allow per-call `Notification.Publish` dispatch override instead of only global.
 - Integrate `ILoggerFactory` for built-in logging across pipelines/modules.
 
 ## 12. Summary
