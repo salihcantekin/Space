@@ -11,4 +11,11 @@ public class HandleAttributeTests
         var attr = new HandleAttribute { Name = "TestHandle" };
         Assert.AreEqual("TestHandle", attr.Name);
     }
+
+    [TestMethod]
+    public void HandleAttribute_IsDefault_CanBeSet()
+    {
+        var attr = new HandleAttribute { IsDefault = true };
+        Assert.IsTrue(attr.IsDefault);
+    }
 }

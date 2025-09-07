@@ -60,7 +60,7 @@ public class TestHandler
 
     UserCreateResponse res = new("");
 
-    [Handle]
+    [Handle(IsDefault = true)]
     //[AuditModule]
     public ValueTask<UserCreateResponse> Handle(HandlerContext<UserCreateCommand> ctx)
     {
@@ -70,7 +70,6 @@ public class TestHandler
         //var result = new UserCreateResponse($"{ctx.Request.Email}_{ctx.Request.Name}_{Random.Shared.Next(1, 100)}");
         return ValueTask.FromResult(res);
     }
-
 
     //[Handle(Name = "Handle2")]
     //public ValueTask<UserCreateResponse> Handle2(HandlerContext<UserCreateCommand> ctx)

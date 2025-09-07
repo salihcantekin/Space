@@ -38,6 +38,9 @@ public class HandlersCompileWrapperModel
 
     public HashSet<string> AllHandlersName { get; private set; }
 
+    // Ordered handlers for registration (default handlers last per Req/Res)
+    public List<HandlersCompileModel> OrderedHandlers { get; private set; }
+
 
     public void AddRangeHandlerAttribute(IEnumerable<HandlersCompileModel> models)
     {
@@ -124,6 +127,12 @@ public class HandlersCompileWrapperModel
         AllHandlersName = [.. HandlerClassNames
                                 .Union(PipelineClassNames)
                                 .Union(NotificationClassNames)];
+
+        // Compute ordered handlers: non-default first, then default within each (Req, Res)
+        OrderedHandlers = handlerCompileModels
+            .GroupBy(h => (h.RequestParameterTypeName, h.ReturnTypeName))
+            .SelectMany(g => g.OrderBy(h => h.IsDefault ? 1 : 0))
+            .ToList();
 
         return this;
     }

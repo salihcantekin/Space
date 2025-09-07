@@ -47,8 +47,9 @@ namespace Space.DependencyInjection
         private static IServiceCollection AddSpaceInternal(IServiceCollection services, SpaceOptions options)
         {
             // Core registrations
-            services.AddScoped<ISpace, global::Space.DependencyInjection.Space>();
+            services.AddSingleton<ISpace, global::Space.DependencyInjection.Space>();
             services.AddSingleton<ModuleFactory>();
+
             if (options.NotificationDispatchType == NotificationDispatchType.Parallel)
                 services.AddSingleton<INotificationDispatcher, ParallelNotificationDispatcher>();
             else
@@ -121,7 +122,7 @@ namespace Space.DependencyInjection
                 {{ end }}
 
                 // Handlers / Pipelines / Modules
-                {{ for h in Handlers }}
+                {{ for h in OrderedHandlers }}
                 {{ if (h.PipelineCompileModels.size == 0 && h.ModuleCompileModels.size == 0) }}
                 // Light path (no pipelines/modules)
                 RegLight<{{ h.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}",
