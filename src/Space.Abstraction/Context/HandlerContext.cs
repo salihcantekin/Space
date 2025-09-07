@@ -14,8 +14,6 @@ public sealed class HandlerContext<TRequest> : BaseContext<TRequest>, IDisposabl
         ServiceProvider = serviceProvider;
         Space = space;
         CancellationToken = cancellationToken;
-
-        base.Reset();
     }
 
     public static HandlerContext<TRequest> Create(HandlerContextStruct handlerContext)

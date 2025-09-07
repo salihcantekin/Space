@@ -1,13 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Space.Abstraction.Extensions;
-using Space.Abstraction.Context;
-using Space.Abstraction.Contracts;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
-using System.Runtime.CompilerServices;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace Space.DependencyInjection;
 
@@ -28,14 +23,14 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
 
     private static class GenericDispatcherCache<TRes>
     {
-        internal static readonly Dictionary<(Type, string), Func<Space, object, CancellationToken, ValueTask<TRes>>> Map = new();
+        internal static readonly Dictionary<(Type, string), Func<Space, object, CancellationToken, ValueTask<TRes>>> Map = [];
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsFastPath(ServiceLifetime lifetime) => lifetime == ServiceLifetime.Singleton || lifetime == ServiceLifetime.Transient;
 
     #region Typed Send
-    
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ValueTask<TResponse> Send<TRequest, TResponse>(TRequest request, string name = null, CancellationToken ct = default)
         where TRequest : notnull
@@ -49,8 +44,11 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
             var cached = EntryCache<TRequest, TResponse>.Entry;
             if (cached != null)
             {
-                if (cached.HasLightInvoker) return cached.InvokeLight(rootProvider, this, request, ct);
+                if (cached.HasLightInvoker)
+                    return cached.InvokeLight(rootProvider, this, request, ct);
+
                 var ctxCached = HandlerContext<TRequest>.Create(rootProvider, request, ct);
+
                 return spaceRegistry.DispatchHandler<TRequest, TResponse>(rootProvider, ctxCached, name).AwaitAndReturnHanderInvoke(ctxCached);
             }
 
@@ -58,47 +56,78 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
             {
                 EntryCache<TRequest, TResponse>.Entry = first;
                 EntryCache<TRequest, TResponse>.Initialized = true;
-                if (first.HasLightInvoker) return first.InvokeLight(rootProvider, this, request, ct);
+
+                if (first.HasLightInvoker)
+                    return first.InvokeLight(rootProvider, this, request, ct);
+
                 var ctxFirst = HandlerContext<TRequest>.Create(rootProvider, request, ct);
+
                 return spaceRegistry.DispatchHandler<TRequest, TResponse>(rootProvider, ctxFirst, name).AwaitAndReturnHanderInvoke(ctxFirst);
             }
 
             var ctx = HandlerContext<TRequest>.Create(rootProvider, request, ct);
+
             return spaceRegistry.DispatchHandler<TRequest, TResponse>(rootProvider, ctx, name).AwaitAndReturnHanderInvoke(ctx);
         }
 
         // Scoped path
         var scope = scopeFactory.CreateScope();
         var sp = scope.ServiceProvider;
+
         if (ct.IsCancellationRequested)
         {
             scope.Dispose();
+
             return ValueTask.FromCanceled<TResponse>(ct);
         }
+
         if (spaceRegistry.TryGetHandlerEntry<TRequest, TResponse>(name, out var scopedEntry) && scopedEntry.IsPipelineFree)
         {
             var lite = scopedEntry.InvokeLight(sp, this, request, ct);
+
             if (lite.IsCompletedSuccessfully)
             {
                 scope.Dispose();
                 return lite;
             }
+
             return AwaitLite(lite, scope);
         }
 
         var scopedCtx = HandlerContext<TRequest>.Create(sp, request, ct);
         var scopedVt = spaceRegistry.DispatchHandler<TRequest, TResponse>(sp, scopedCtx, name).AwaitAndReturnHanderInvoke(scopedCtx);
+
         if (scopedVt.IsCompletedSuccessfully)
         {
             scope.Dispose();
             return scopedVt;
         }
+
         return Await(scopedVt, scope);
 
         static async ValueTask<TResponse> Await(ValueTask<TResponse> task, IServiceScope scope)
-        { try { return await task; } finally { scope.Dispose(); } }
+        {
+            try
+            {
+                return await task;
+            }
+            finally
+            {
+                scope.Dispose();
+            }
+        }
+
         static async ValueTask<TResponse> AwaitLite(ValueTask<TResponse> task, IServiceScope scope)
-        { try { return await task; } finally { scope.Dispose(); } }
+        {
+            try
+            {
+                return await task;
+            }
+            finally
+            {
+                scope.Dispose();
+            }
+        }
     }
 
     // Constrained overloads to avoid boxing for IRequest<TResponse>
@@ -113,11 +142,11 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         where TRequest : class, IRequest<TResponse>
         where TResponse : notnull
             => Send<TRequest, TResponse>(request, null, ct);
-  
+
     #endregion
 
     #region Object Send
-    
+
     // Non-async fast path using generic dispatcher cache -> typed Send to avoid boxing
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ValueTask<TResponse> Send<TResponse>(object request, string name = null, CancellationToken ct = default)
@@ -139,6 +168,7 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
             // Build and cache dispatcher to typed Send<TRuntime,TResponse>
             var del = BuildTypedDispatcher<TResponse>(type, name);
             GenericDispatcherCache<TResponse>.Map[key] = del;
+
             return del(this, request, ct);
         }
 
@@ -147,8 +177,12 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         async ValueTask<TRes> SlowObjectScoped<TRes>(object req, string handlerName, CancellationToken token)
         {
             using var scope = scopeFactory.CreateScope();
-            if (token.IsCancellationRequested) return await ValueTask.FromCanceled<TRes>(token);
+
+            if (token.IsCancellationRequested) 
+                return await ValueTask.FromCanceled<TRes>(token);
+
             var result = await spaceRegistry.DispatchHandler(req, handlerName, typeof(TRes), scope.ServiceProvider, token);
+
             return (TRes)result!;
         }
     }
@@ -172,7 +206,7 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
 
         return lambda.Compile();
     }
-   
+
     #endregion
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -198,10 +232,15 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         async ValueTask SlowPublishScoped(TRequest req, string handlerName, CancellationToken token)
         {
             using var scope = scopeFactory.CreateScope();
-            if (token.IsCancellationRequested) return; // after scope create  acceptable edge
+
+            if (token.IsCancellationRequested) 
+                return; // after scope create  acceptable edge
+
             var ctx = NotificationContext<TRequest>.Create(scope.ServiceProvider, req, token);
             var vt = spaceRegistry.DispatchNotification(ctx, handlerName).AwaitAndReturnNotificationInvoke(ctx);
-            if (!vt.IsCompletedSuccessfully) await vt;
+
+            if (!vt.IsCompletedSuccessfully) 
+                await vt;
         }
     }
 

@@ -6,7 +6,7 @@ namespace Space.Abstraction.Context;
 
 public class HandlerContextPool<TRequest>
 {
-    private const int MaxRetained = 1024; // increased from 100 to reduce churn under load
+    private const int MaxRetained = 1024;
     private static readonly DefaultObjectPool<HandlerContext<TRequest>> pool =
         new(new HandlerContextPooledObjectPolicy<TRequest>(), maximumRetained: MaxRetained);
 
@@ -17,6 +17,7 @@ public class HandlerContextPool<TRequest>
     {
         // Fast thread-local reuse (avoids pool hit & lock-free path inside pool)
         var ctx = threadSlot;
+
         if (ctx != null)
         {
             threadSlot = null; // consume
@@ -25,7 +26,9 @@ public class HandlerContextPool<TRequest>
         {
             ctx = pool.Get();
         }
+
         ctx.Initialize(request, serviceProvider, space, cancellationToken);
+        
         return ctx;
     }
 
@@ -38,6 +41,7 @@ public class HandlerContextPool<TRequest>
             threadSlot = ctx;
             return;
         }
+
         pool.Return(ctx);
     }
 }

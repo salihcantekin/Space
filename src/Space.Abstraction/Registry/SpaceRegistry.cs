@@ -52,6 +52,7 @@ public partial class SpaceRegistry
         var masterClass = serviceProvider.GetService(moduleType);
 
         int order = 0;
+
         if (masterClass is SpaceModule module)
         {
             order = module.PipelineOrder;

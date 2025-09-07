@@ -22,26 +22,31 @@ public static class MethodSymbolExtensions
 
     internal static AttributeData GetHandlerAttribute(this IMethodSymbol methodSymbol)
     {
-        var attributeName = SourceGenConstants.HandleAttributeFullName; //typeof(HandleAttribute).FullName;
+        var attributeName = SourceGenConstants.HandleAttributeFullName; // typeof(HandleAttribute).FullName
+
         return methodSymbol.GetMethodAttribute(attributeName);
     }
 
     internal static AttributeData GetNotificationAttribute(this IMethodSymbol methodSymbol)
     {
-        var attributeName = SourceGenConstants.NotificationAttributeFullName; //typeof(NotificationAttribute).FullName;
+        var attributeName = SourceGenConstants.NotificationAttributeFullName; // typeof(NotificationAttribute).FullName
+
         return methodSymbol.GetMethodAttribute(attributeName);
     }
 
     internal static AttributeData GetPipelineAttribute(this IMethodSymbol methodSymbol)
     {
-        var attributeName = SourceGenConstants.PipelineAttributeFullName; // typeof(PipelineAttribute).FullName;
+        var attributeName = SourceGenConstants.PipelineAttributeFullName; // typeof(PipelineAttribute).FullName
+
         return methodSymbol.GetMethodAttribute(attributeName);
     }
 
     public static string GetAttributeArgument(this AttributeData attribute, string argumentName)
     {
         if (attribute is not { NamedArguments.Length: > 0 } || string.IsNullOrEmpty(argumentName))
+        {
             return string.Empty;
+        }
 
         var val = attribute.NamedArguments
                     .FirstOrDefault(a => StringComparer.OrdinalIgnoreCase.Equals(a.Key, argumentName))
@@ -49,7 +54,6 @@ public static class MethodSymbolExtensions
 
         return val;
     }
-
 
     public static string GetResponseGenericTypeName(this IMethodSymbol methodSymbol, bool fullName = true)
     {
@@ -75,8 +79,6 @@ public static class MethodSymbolExtensions
         return taskName;
     }
 
-
-
     public static Dictionary<string, object> GetProperties(this AttributeData attr)
     {
         try
@@ -84,7 +86,9 @@ public static class MethodSymbolExtensions
             var dict = new Dictionary<string, object>();
 
             foreach (var named in attr.NamedArguments)
-                dict[named.Key] = named.Value.Value ?? "";
+            {
+                dict[named.Key] = named.Value.Value ?? string.Empty;
+            }
 
             return dict;
         }
@@ -94,19 +98,23 @@ public static class MethodSymbolExtensions
         }
     }
 
-
     /// <summary>
-    /// AttributeData ve property adı alıp, property'nin değerini (named, ctor, static/readonly property) döndürür.
+    /// Takes AttributeData and a property name, and returns the property's value (supports named, ctor, and static/readonly property).
     /// </summary>
     public static object GetAttributePropertyValue(this AttributeData attribute, string propertyName)
     {
         if (attribute == null || string.IsNullOrEmpty(propertyName))
+        {
             return null;
+        }
 
         // 1. Named arguments
         var named = attribute.NamedArguments.FirstOrDefault(a => StringComparer.OrdinalIgnoreCase.Equals(a.Key, propertyName));
+
         if (named.Value.Value != null)
+        {
             return named.Value.Value;
+        }
 
         // 2. Constructor arguments
         var property = attribute.AttributeClass?.GetMembers()
@@ -122,8 +130,11 @@ public static class MethodSymbolExtensions
                     if (StringComparer.OrdinalIgnoreCase.Equals(ctor.Parameters[i].Name, propertyName))
                     {
                         var ctorArg = attribute.ConstructorArguments[i];
+
                         if (ctorArg.Value != null)
+                        {
                             return ctorArg.Value;
+                        }
                     }
                 }
             }
@@ -137,26 +148,4 @@ public static class MethodSymbolExtensions
 
         return null;
     }
-
-
-
-
-
-    //private static readonly SymbolDisplayFormat GlobalFullFormat =
-    //    new SymbolDisplayFormat(
-    //        globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,                  // adds global::
-    //        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
-    //        genericsOptions:
-    //              SymbolDisplayGenericsOptions.IncludeTypeParameters
-    //            | SymbolDisplayGenericsOptions.IncludeVariance
-    //            | SymbolDisplayGenericsOptions.IncludeTypeConstraints,
-    //        miscellaneousOptions:
-    //              SymbolDisplayMiscellaneousOptions.UseSpecialTypes
-    //            | SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers
-    //    );
-
-    //internal static string ToGlobalDisplayString(this ISymbol symbol)
-    //    => symbol?.ToDisplayString(GlobalFullFormat) ?? string.Empty;
-
-
 }
