@@ -13,8 +13,6 @@ public abstract class SpaceModule(IServiceProvider serviceProvider)
 
     protected Func<IServiceProvider, IModuleProvider> ModuleProviderFunc { get; set; }
 
-
-
     protected void CacheWrapper<TRequest, TResponse>(HandleIdentifier wrapperIdentifier, ModulePipelineWrapper<TRequest, TResponse> moduleWrapper)
     {
         moduleWrappers[wrapperIdentifier] = moduleWrapper;
@@ -26,9 +24,6 @@ public abstract class SpaceModule(IServiceProvider serviceProvider)
             ? wrapper as ModulePipelineWrapper<TRequest, TResponse>
             : default;
     }
-
-
-
 
     public void SetOptionAction(Func<IServiceProvider, IModuleProvider> moduleProviderFunc)
     {

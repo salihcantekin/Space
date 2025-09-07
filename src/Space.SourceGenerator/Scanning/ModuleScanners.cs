@@ -23,8 +23,6 @@ internal static class ModuleScanners
         }
     }
 
-
-
     public static IncrementalValuesProvider<IMethodSymbol> GetModuleProvider(IncrementalGeneratorInitializationContext context)
     {
         var moduleAttributeMethods = context.SyntaxProvider

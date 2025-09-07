@@ -19,7 +19,9 @@ public class NotificationRegistry(INotificationDispatcher notificationDispatcher
 
     public void RegisterNotification<TRequest>(Func<NotificationContext<TRequest>, ValueTask> handler, string name = "")
     {
-        if (handler is null) throw new NotificationHandlerNullException(typeof(TRequest), name);
+        if (handler is null) 
+            throw new NotificationHandlerNullException(typeof(TRequest), name);
+
         if (isSealed)
             throw new NotificationRegistrySealedException();
 
@@ -43,7 +45,9 @@ public class NotificationRegistry(INotificationDispatcher notificationDispatcher
 
     public void CompleteRegistration()
     {
-        if (isSealed) return;
+        if (isSealed) 
+            return;
+
         readOnlyNotificationMap = new ReadOnlyDictionary<(Type, string), List<Delegate>>(notificationMap);
         readOnlyNotificationMapByType = new ReadOnlyDictionary<Type, List<Delegate>>(notificationMapByType);
         isSealed = true;
