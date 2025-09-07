@@ -18,7 +18,7 @@ public static class TaskExtensions
         { try { return await t; } finally { HandlerContextPool<TRequest>.Return(c); } }
     }
 
-    public static ValueTask<TResponse> AwaitAndReturnHanderInvoke<TRequest, TResponse>(this ValueTask<TResponse> task, HandlerContext<TRequest> ctx)
+    public static ValueTask<TResponse> AwaitAndReturnHandlerInvoke<TRequest, TResponse>(this ValueTask<TResponse> task, HandlerContext<TRequest> ctx)
     {
         if (task.IsCompletedSuccessfully)
         {

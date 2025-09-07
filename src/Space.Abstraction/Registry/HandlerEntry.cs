@@ -117,7 +117,8 @@ public partial class SpaceRegistry
             if (!HasLightInvoker)
             {
                 var ctxDbg = HandlerContext<TRequest>.Create(sp, request, ct);
-                return handlerInvoker(ctxDbg).AwaitAndReturnHanderInvoke(ctxDbg);
+
+                return handlerInvoker(ctxDbg).AwaitAndReturnHandlerInvoke(ctxDbg);
             }
 #endif
             var lctx = new LightHandlerContext<TRequest>(request, sp, space, ct);
