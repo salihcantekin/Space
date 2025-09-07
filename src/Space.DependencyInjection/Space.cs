@@ -3,6 +3,7 @@ using Space.Abstraction.Extensions;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using Space.Abstraction; // for NotificationDispatchType
 
 namespace Space.DependencyInjection;
 
@@ -217,7 +218,7 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
     #region Publish
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ValueTask Publish<TRequest>(TRequest request, string name = null, CancellationToken ct = default)
+    public ValueTask Publish<TRequest>(TRequest request, CancellationToken ct = default)
     {
         if (ct.IsCancellationRequested)
             return ValueTask.FromCanceled(ct);
@@ -225,12 +226,12 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         if (IsFastPath(spaceRegistry.HandlerLifetime))
         {
             var ctxFast = NotificationContext<TRequest>.Create(rootProvider, request, ct);
-            return spaceRegistry.DispatchNotification(ctxFast, name).AwaitAndReturnNotificationInvoke(ctxFast);
+            return spaceRegistry.DispatchNotification(ctxFast).AwaitAndReturnNotificationInvoke(ctxFast);
         }
 
-        return SlowPublishScoped(request, name, ct);
+        return SlowPublishScoped(request, ct);
 
-        async ValueTask SlowPublishScoped(TRequest req, string handlerName, CancellationToken token)
+        async ValueTask SlowPublishScoped(TRequest req, CancellationToken token)
         {
             using var scope = scopeFactory.CreateScope();
 
@@ -238,9 +239,38 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
               return;
             
             var ctx = NotificationContext<TRequest>.Create(scope.ServiceProvider, req, token);
-            var vt = spaceRegistry.DispatchNotification(ctx, handlerName).AwaitAndReturnNotificationInvoke(ctx);
+            var vt = spaceRegistry.DispatchNotification(ctx).AwaitAndReturnNotificationInvoke(ctx);
 
             if (!vt.IsCompletedSuccessfully) 
+                await vt;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ValueTask Publish<TRequest>(TRequest request, NotificationDispatchType dispatchType, CancellationToken ct = default)
+    {
+        if (ct.IsCancellationRequested)
+            return ValueTask.FromCanceled(ct);
+
+        if (IsFastPath(spaceRegistry.HandlerLifetime))
+        {
+            var ctxFast = NotificationContext<TRequest>.Create(rootProvider, request, ct);
+            return spaceRegistry.DispatchNotification(ctxFast, dispatchType).AwaitAndReturnNotificationInvoke(ctxFast);
+        }
+
+        return SlowPublishScoped(request, dispatchType, ct);
+
+        async ValueTask SlowPublishScoped(TRequest req, NotificationDispatchType dt, CancellationToken token)
+        {
+            using var scope = scopeFactory.CreateScope();
+
+            if (token.IsCancellationRequested)
+                return;
+
+            var ctx = NotificationContext<TRequest>.Create(scope.ServiceProvider, req, token);
+            var vt = spaceRegistry.DispatchNotification(ctx, dt).AwaitAndReturnNotificationInvoke(ctx);
+
+            if (!vt.IsCompletedSuccessfully)
                 await vt;
         }
     }

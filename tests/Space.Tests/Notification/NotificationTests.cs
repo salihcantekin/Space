@@ -3,6 +3,7 @@ using Space.Abstraction;
 using Space.Abstraction.Attributes;
 using Space.Abstraction.Context;
 using Space.DependencyInjection;
+using System.Threading.Tasks;
 
 namespace Space.Tests.Notification;
 
@@ -40,7 +41,6 @@ public class NotificationTests
     public void TestInit()
     {
         notificatonHandler.OnIntFunc = null;
-        notificatonHandler.OnIntNamedFunc = null;
         notificatonHandler.OnPingAFunc = null;
         notificatonHandler.OnPingBFunc = null;
     }
@@ -48,7 +48,6 @@ public class NotificationTests
     public class NotificationHandlers
     {
         public Func<NotificationContext<int>, ValueTask> OnIntFunc;
-        public Func<NotificationContext<int>, ValueTask> OnIntNamedFunc;
         public Func<NotificationContext<Ping>, ValueTask> OnPingAFunc;
         public Func<NotificationContext<Ping>, ValueTask> OnPingBFunc;
 
@@ -56,15 +55,11 @@ public class NotificationTests
         public virtual ValueTask OnInt(NotificationContext<int> ctx)
             => OnIntFunc != null ? OnIntFunc(ctx) : ValueTask.CompletedTask;
 
-        [Notification(HandleName = "named")]
-        public virtual ValueTask OnIntNamed(NotificationContext<int> ctx)
-            => OnIntNamedFunc != null ? OnIntNamedFunc(ctx) : ValueTask.CompletedTask;
-
-        [Notification(HandleName = "A")]
+        [Notification]
         public virtual ValueTask OnPingA(NotificationContext<Ping> ctx)
             => OnPingAFunc != null ? OnPingAFunc(ctx) : ValueTask.CompletedTask;
 
-        [Notification(HandleName = "B")]
+        [Notification]
         public virtual ValueTask OnPingB(NotificationContext<Ping> ctx)
             => OnPingBFunc != null ? OnPingBFunc(ctx) : ValueTask.CompletedTask;
     }
@@ -92,25 +87,17 @@ public class NotificationTests
     }
 
     [TestMethod]
-    public async Task Publish_WithName_TargetsOnlyMatching_Func()
+    public async Task Publish_Dispatches_All_Int_Subscribers_Func()
     {
         // Arrange
-        bool namedCalled = false;
-        NotificationContext<int>? receivedCtx = null;
-        notificatonHandler.OnIntNamedFunc = ctx =>
-        {
-            namedCalled = true;
-            receivedCtx = ctx;
-            return ValueTask.CompletedTask;
-        };
+        bool called1 = false;
+        notificatonHandler.OnIntFunc = _ => { called1 = true; return ValueTask.CompletedTask; };
 
         // Act
-        await Space.Publish(5, name: "named");
+        await Space.Publish(42);
 
         // Assert
-        Assert.IsTrue(namedCalled);
-        Assert.IsNotNull(receivedCtx);
-        Assert.AreEqual(5, receivedCtx.Request);
+        Assert.IsTrue(called1);
     }
 
     [TestMethod]
@@ -155,5 +142,59 @@ public class NotificationTests
         Assert.IsNotNull(ctxB);
         Assert.AreEqual(1, ctxA.Request.Id);
         Assert.AreEqual(1, ctxB.Request.Id);
+    }
+
+    [TestMethod]
+    public async Task Publish_With_DispatchType_Parallel_Calls_All_Subscribers()
+    {
+        // Arrange: default Sequential, override to Parallel per call
+        var services = new ServiceCollection();
+        services.AddSpace(opt =>
+        {
+            opt.NotificationDispatchType = NotificationDispatchType.Sequential;
+            opt.ServiceLifetime = ServiceLifetime.Singleton;
+        });
+
+        using var provider = services.BuildServiceProvider();
+        var spaceLocal = provider.GetRequiredService<ISpace>();
+        var handlers = provider.GetRequiredService<NotificationHandlers>();
+
+        bool a = false, b = false;
+        handlers.OnPingAFunc = _ => { a = true; return ValueTask.CompletedTask; };
+        handlers.OnPingBFunc = _ => { b = true; return ValueTask.CompletedTask; };
+
+        // Act
+        await spaceLocal.Publish(new Ping(99), NotificationDispatchType.Parallel);
+
+        // Assert
+        Assert.IsTrue(a);
+        Assert.IsTrue(b);
+    }
+
+    [TestMethod]
+    public async Task Publish_With_DispatchType_Sequential_Calls_All_Subscribers()
+    {
+        // Arrange: default Parallel, override to Sequential per call
+        var services = new ServiceCollection();
+        services.AddSpace(opt =>
+        {
+            opt.NotificationDispatchType = NotificationDispatchType.Parallel;
+            opt.ServiceLifetime = ServiceLifetime.Singleton;
+        });
+
+        using var provider = services.BuildServiceProvider();
+        var spaceLocal = provider.GetRequiredService<ISpace>();
+        var handlers = provider.GetRequiredService<NotificationHandlers>();
+
+        bool a = false, b = false;
+        handlers.OnPingAFunc = _ => { a = true; return ValueTask.CompletedTask; };
+        handlers.OnPingBFunc = _ => { b = true; return ValueTask.CompletedTask; };
+
+        // Act
+        await spaceLocal.Publish(new Ping(100), NotificationDispatchType.Sequential);
+
+        // Assert
+        Assert.IsTrue(a);
+        Assert.IsTrue(b);
     }
 }

@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Space.Abstraction;
 
 namespace Space.Abstraction.Registry;
 
@@ -93,12 +94,18 @@ public partial class SpaceRegistry
     internal ValueTask<object> DispatchHandler(object request, string name, Type responseType, IServiceProvider execProvider, CancellationToken ct = default)
         => handlerRegistry.DispatchHandler(request, name, responseType, execProvider, ct);
 
-    public void RegisterNotification<TRequest>(Func<NotificationContext<TRequest>, ValueTask> handler, string name = "")
-        => notificationRegistry.RegisterNotification(handler, name);
+    // Notifications (unnamed)
+    public void RegisterNotification<TRequest>(Func<NotificationContext<TRequest>, ValueTask> handler)
+        => notificationRegistry.RegisterNotification(handler);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ValueTask DispatchNotification<TRequest>(NotificationContext<TRequest> ctx, string name = "")
-        => notificationRegistry.DispatchNotification(ctx, name);
+    public ValueTask DispatchNotification<TRequest>(NotificationContext<TRequest> ctx)
+        => notificationRegistry.DispatchNotification(ctx);
+
+    // Per-call override
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ValueTask DispatchNotification<TRequest>(NotificationContext<TRequest> ctx, NotificationDispatchType dispatchType)
+        => notificationRegistry.DispatchNotification(ctx, dispatchType);
 
     public void CompleteRegistration()
     {
