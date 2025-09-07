@@ -1,10 +1,11 @@
 using Microsoft.Extensions.ObjectPool;
 using System;
+using System.Runtime.CompilerServices;
 using System.Threading;
 
 namespace Space.Abstraction.Context;
 
-public class PipelineContextPool<TRequest>
+public static class PipelineContextPool<TRequest>
 {
     private const int MaxRetained = 1024; // standardized with HandlerContextPool
     private static readonly DefaultObjectPool<PipelineContext<TRequest>> pool =
@@ -13,6 +14,7 @@ public class PipelineContextPool<TRequest>
     [ThreadStatic]
     private static PipelineContext<TRequest> threadSlot; // single-thread fast path
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static PipelineContext<TRequest> Get(TRequest request, IServiceProvider serviceProvider, ISpace space, CancellationToken cancellationToken)
     {
         // Fast thread-local reuse (avoids pool hit & lock-free path inside pool)
@@ -29,6 +31,7 @@ public class PipelineContextPool<TRequest>
         return ctx;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Return(PipelineContext<TRequest> ctx)
     {
         // Try place back into thread slot, otherwise pool
@@ -42,7 +45,7 @@ public class PipelineContextPool<TRequest>
     }
 }
 
-public class PipelineContextPooledObjectPolicy<TRequest> : PooledObjectPolicy<PipelineContext<TRequest>>
+public sealed class PipelineContextPooledObjectPolicy<TRequest> : PooledObjectPolicy<PipelineContext<TRequest>>
 {
     public override PipelineContext<TRequest> Create() => new();
 
