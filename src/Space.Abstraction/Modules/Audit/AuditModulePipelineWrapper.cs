@@ -20,7 +20,7 @@ public class AuditModulePipelineWrapper<TRequest, TResponse>(AuditModuleConfig A
     public override async ValueTask<TResponse> HandlePipeline(PipelineContext<TRequest> ctx, PipelineDelegate<TRequest, TResponse> next)
     {
         await moduleProvider.Before<TRequest, TResponse>(ctx.Request);
-        Console.WriteLine("Audit Module Called");
+        
         // call the actual handle method
         var response = await next(ctx);
 
