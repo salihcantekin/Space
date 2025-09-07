@@ -48,13 +48,21 @@ internal static class HandlerScanner
         var (taskName, respType) = GetHandlerResponseType(handleAttr, methodSymbol);
 
         // nameof(HandleAttribute.Name)
-        yield return new HandlersCompileModel(handleAttr.GetAttributeArgument("Name"))
+        var model = new HandlersCompileModel(handleAttr.GetAttributeArgument("Name"))
         {
             ClassFullName = classSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
             RequestParameterTypeName = reqType,
             MethodName = methodSymbol.Name,
             ReturnTypeName = respType,
-            ReturnTaskTypeName = taskName
+            ReturnTaskTypeName = taskName,
         };
+
+        var isDefaultRaw = handleAttr.GetAttributeArgument("IsDefault");
+        if (bool.TryParse(isDefaultRaw, out var isDef))
+        {
+            model.IsDefault = isDef;
+        }
+
+        yield return model;
     }
 }

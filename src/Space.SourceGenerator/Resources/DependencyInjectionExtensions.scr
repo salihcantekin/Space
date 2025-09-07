@@ -121,7 +121,7 @@ namespace Space.DependencyInjection
                 {{ end }}
 
                 // Handlers / Pipelines / Modules
-                {{ for h in Handlers }}
+                {{ for h in OrderedHandlers }}
                 {{ if (h.PipelineCompileModels.size == 0 && h.ModuleCompileModels.size == 0) }}
                 // Light path (no pipelines/modules)
                 RegLight<{{ h.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}",
