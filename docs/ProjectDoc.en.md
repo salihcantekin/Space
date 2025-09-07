@@ -168,5 +168,29 @@ Module attributes do not define their own methods; they annotate existing `[Hand
 ## 12. Summary
 Space provides a lean, attribute & source-generator driven approach to mediator patterns with extensible, modular cross-cutting pipelines and zero runtime reflection registration cost.
 
+## 13. Versioning & Releases
+This repository uses GitHub Releases to drive NuGet publishing. No packages are published on branch pushes.
+
+- Stable release (prod publish):
+  - Create a GitHub Release and DO NOT mark it as "pre-release".
+  - Tag format: either `vX.Y.Z` or `X.Y.Z` (a single leading `v` is ignored).
+  - The Prod workflow builds, tests, packs, and publishes packages with version `X.Y.Z`.
+
+- Preview release (dev publish):
+  - Create a GitHub Release and mark it as "pre-release".
+  - Tag format: `vX.Y.Z` or `X.Y.Z`.
+  - The Dev workflow builds, tests, packs, and publishes packages with version `X.Y.Z-preview`.
+
+- Validation CI:
+  - Feature branches (`feature/*`, `features/*`) run build/test validation on push.
+  - Pull requests into `dev` or `master` run validation as well.
+
+- Version parsing details:
+  - A single leading `v`/`V` is trimmed (e.g., `v1.2.3` -> `1.2.3`).
+  - Basic SemVer validation is performed. Pre-release/build metadata are supported.
+
+- Local development:
+  - Debug builds use a local version like `0.0.0-local` to avoid colliding with published packages.
+
 ## License
 MIT
