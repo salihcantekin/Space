@@ -57,6 +57,13 @@ public class HandleAttributeRule : IDiagnosticRule
                         hasErrors = true;
                         continue;
                     }
+
+                    if (methodSymbol.DeclaredAccessibility != Accessibility.Public)
+                    {
+                        ReportDiagnostic(context, methodNode, SourceGenConstants.HandleInvalidAccessibilityDiagnosticId, SourceGenConstants.HandleInvalidAccessibilityMessage);
+                        hasErrors = true;
+                        continue;
+                    }
                 }
             }
         }
