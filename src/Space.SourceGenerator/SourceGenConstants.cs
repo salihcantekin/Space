@@ -22,11 +22,13 @@ namespace Space.SourceGenerator
         public const string HandleInvalidParameterCountDiagnosticId = "HANDLE010";
         public const string HandleInvalidParameterTypeDiagnosticId = "HANDLE011";
         public const string HandleInvalidReturnTypeDiagnosticId = "HANDLE012";
+        public const string HandleInvalidAccessibilityDiagnosticId = "HANDLE013";
 
         // Diagnostic messages for HandleAttributeRule
         public const string HandleInvalidParameterCountMessage = "Method with HandleAttribute must have exactly one parameter of type HandlerContext<TRequest>.";
         public const string HandleInvalidParameterTypeMessage = "Parameter must be HandlerContext<TRequest>.";
         public const string HandleInvalidReturnTypeMessage = "Return type must be ValueTask<TResponse>.";
+        public const string HandleInvalidAccessibilityMessage = " Handle method must be public.";
 
         public static class NameSpaces
         {
