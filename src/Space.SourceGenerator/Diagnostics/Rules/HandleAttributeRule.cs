@@ -57,6 +57,14 @@ public class HandleAttributeRule : IDiagnosticRule
                         hasErrors = true;
                         continue;
                     }
+
+                    // Rule 4: Method must be public or internal
+                    if (methodSymbol.DeclaredAccessibility != Accessibility.Public && methodSymbol.DeclaredAccessibility != Accessibility.Internal)
+                    {
+                        ReportDiagnostic(context, methodNode, SourceGenConstants.HandleInvalidAccessibilityDiagnosticId, SourceGenConstants.HandleInvalidAccessibilityMessage);
+                        hasErrors = true;
+                        continue;
+                    }
                 }
             }
         }
