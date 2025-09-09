@@ -28,7 +28,7 @@ namespace Space.SourceGenerator
         public const string HandleInvalidParameterCountMessage = "Method with HandleAttribute must have exactly one parameter of type HandlerContext<TRequest>.";
         public const string HandleInvalidParameterTypeMessage = "Parameter must be HandlerContext<TRequest>.";
         public const string HandleInvalidReturnTypeMessage = "Return type must be ValueTask<TResponse>.";
-        public const string HandleInvalidAccessibilityMessage = "Handle method must be public.";
+        public const string HandleInvalidAccessibilityMessage = "Handle method must be public or internal.";
 
         public static class NameSpaces
         {
