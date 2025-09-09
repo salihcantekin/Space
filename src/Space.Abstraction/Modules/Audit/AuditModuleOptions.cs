@@ -17,4 +17,10 @@ public class AuditModuleOptions : BaseModuleOptions
 
         return this;
     }
+
+    public AuditModuleOptions WithAuditProfile(string profileName)
+    {
+        WithProfile(profileName);
+        return this;
+    }
 }

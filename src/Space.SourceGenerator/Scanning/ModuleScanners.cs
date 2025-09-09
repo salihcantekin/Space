@@ -55,6 +55,9 @@ internal static class ModuleScanners
         if (attr is null || methodSymbol is null)
             return null;
 
+        // Extract profile name from attribute if present, otherwise default to "Default"
+        var profileName = attr.GetAttributePropertyValue("ProfileName")?.ToString() ?? "Default";
+
         return new ModuleCompileModel
         {
             ClassFullName = methodSymbol.ContainingType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
@@ -62,6 +65,7 @@ internal static class ModuleScanners
             RequestType = GetRequestType(methodSymbol),
             ResponseType = methodSymbol.GetResponseGenericTypeName(fullName: true),
             ModuleName = attr.AttributeClass?.Name ?? "UnknownModule",
+            ProfileName = profileName,
             ModuleProperties = attr.GetProperties(),
             ModuleProviderType = attr.GetAttributePropertyValue("ModuleProviderType")?.ToString() ?? ""
         };

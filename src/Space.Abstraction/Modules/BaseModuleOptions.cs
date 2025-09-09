@@ -7,6 +7,7 @@ public abstract class BaseModuleOptions : IModuleOptions
 {
     public IModuleProvider ModuleProvider { get; private set; }
     internal Func<IServiceProvider, IModuleProvider> ModuleProviderAction { get; set; }
+    public string ProfileName { get; set; } = "Default";
 
     public void WithModuleProvider(IModuleProvider provider)
     {
@@ -28,5 +29,13 @@ public abstract class BaseModuleOptions : IModuleOptions
             throw new ModuleProviderFactoryAlreadySetException();
 
         ModuleProviderAction = providerFunc;
+    }
+
+    public void WithProfile(string profileName)
+    {
+        if (string.IsNullOrWhiteSpace(profileName))
+            throw new ArgumentException("Profile name cannot be null or empty", nameof(profileName));
+
+        ProfileName = profileName;
     }
 }

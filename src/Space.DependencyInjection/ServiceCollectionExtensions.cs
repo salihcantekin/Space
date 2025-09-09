@@ -1,6 +1,8 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using System.Reflection;
 using System.IO; // Needed for Directory
+using System.Collections.Generic;
 using Space.Abstraction.Exceptions;
 
 namespace Space.DependencyInjection;
@@ -17,6 +19,39 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddSpace(this IServiceCollection services, Action<SpaceOptions> configure = null)
     {
         EnsureSpaceAssembliesLoaded();
+
+        // Register SpaceOptions for use in module generation
+        var spaceOptions = new SpaceOptions();
+        configure?.Invoke(spaceOptions);
+        
+        services.Configure<SpaceOptions>(opt => 
+        {
+            opt.ServiceLifetime = spaceOptions.ServiceLifetime;
+            opt.NotificationDispatchType = spaceOptions.NotificationDispatchType;
+            
+            // Copy module profile configurations by calling the public methods
+            // We need to access the internal moduleProfiles dictionary
+            var moduleProfilesField = typeof(SpaceOptions)
+                .GetField("moduleProfiles", BindingFlags.NonPublic | BindingFlags.Instance);
+                
+            if (moduleProfilesField?.GetValue(spaceOptions) is Dictionary<string, Dictionary<string, object>> moduleProfiles)
+            {
+                foreach (var kvp in moduleProfiles)
+                {
+                    var parts = kvp.Key.Split(':');
+                    if (parts.Length == 2)
+                    {
+                        opt.ConfigureModuleProfile(parts[0], parts[1], config =>
+                        {
+                            foreach (var prop in kvp.Value)
+                            {
+                                config[prop.Key] = prop.Value;
+                            }
+                        });
+                    }
+                }
+            }
+        });
 
         var spaceAssemblies = AppDomain.CurrentDomain.GetAssemblies()
             .Where(a => a.GetName().Name.StartsWith("Space", StringComparison.Ordinal))

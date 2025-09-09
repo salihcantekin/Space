@@ -17,6 +17,7 @@ public class ModuleCompileModel
     public string RequestType { get; set; }
     public string ResponseType { get; set; }
     public string ModuleName { get; set; }
+    public string ProfileName { get; set; } = "Default";
 
     public string ModuleProviderType { get; set; }
 
