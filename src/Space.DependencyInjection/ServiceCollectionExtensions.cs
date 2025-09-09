@@ -20,7 +20,7 @@ public static class ServiceCollectionExtensions
     {
         EnsureSpaceAssembliesLoaded();
 
-        // Register SpaceOptions for use in module generation
+        // Register SpaceOptions and profile provider for use in module generation
         var spaceOptions = new SpaceOptions();
         configure?.Invoke(spaceOptions);
         
@@ -52,6 +52,9 @@ public static class ServiceCollectionExtensions
                 }
             }
         });
+
+        // Register the profile provider
+        services.AddSingleton<IModuleProfileProvider, ModuleProfileProvider>();
 
         var spaceAssemblies = AppDomain.CurrentDomain.GetAssemblies()
             .Where(a => a.GetName().Name.StartsWith("Space", StringComparison.Ordinal))

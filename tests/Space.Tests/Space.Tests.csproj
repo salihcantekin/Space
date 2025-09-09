@@ -7,10 +7,10 @@
 		<IsTestProject>true</IsTestProject>
 	</PropertyGroup>
 
-	<!--<PropertyGroup>
+	<PropertyGroup>
 		<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
 		<CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
-	</PropertyGroup>-->
+	</PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />

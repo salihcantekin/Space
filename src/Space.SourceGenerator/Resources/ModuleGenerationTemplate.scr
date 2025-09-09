@@ -3,7 +3,6 @@
 // </auto-generated>
 
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using Space.Abstraction.Modules;
 using Space.Abstraction;
 
@@ -21,18 +20,12 @@ namespace Space.DependencyInjection
 
             services.AddKeyedSingleton(HandleIdentifier.From<{{ model.RequestType }},{{ model.ResponseType }}>("{{ model.ModuleName }}"), (sp, _) =>
             {
-                var spaceOptions = sp.GetService<IOptions<SpaceOptions>>()?.Value ?? new SpaceOptions();
-                var profileDefaults = spaceOptions.GetModuleProfileConfiguration("{{ model.ModuleName }}", "{{ model.ProfileName }}");
-                
                 var moduleConfig = new ModuleConfig("{{ model.ModuleName }}")
                 {
                     ProfileName = "{{ model.ProfileName }}"
                 };
                 
-                // Set profile defaults first
-                moduleConfig.SetProfileDefaults(profileDefaults);
-                
-                // Then set explicit module properties (which can override defaults)
+                // Set explicit module properties
                 {{ for property in model.ModuleProperties }}
             moduleConfig.SetModuleProperty("{{ property.Key }}", "{{ property.Value }}");
                 {{ end }}

@@ -47,6 +47,21 @@ public abstract class SpaceModule(IServiceProvider serviceProvider)
     public virtual IModuleConfig GetModuleConfig(HandleIdentifier moduleHandleIdentifier)
     {
         var moduleConfig = ServiceProvider.GetKeyedService<ModuleConfig>(moduleHandleIdentifier);
+        
+        if (moduleConfig != null)
+        {
+            // Try to get profile defaults
+            var profileProvider = ServiceProvider.GetService<IModuleProfileProvider>();
+            if (profileProvider != null && !string.IsNullOrEmpty(moduleConfig.ProfileName))
+            {
+                var profileDefaults = profileProvider.GetModuleProfileConfiguration(moduleConfig.ModuleName, moduleConfig.ProfileName);
+                if (profileDefaults.Count > 0)
+                {
+                    moduleConfig.SetProfileDefaults(profileDefaults);
+                }
+            }
+        }
+        
         return moduleConfig;
     }
 
