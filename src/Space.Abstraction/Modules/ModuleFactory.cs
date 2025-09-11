@@ -27,8 +27,8 @@ public class ModuleFactory(IServiceProvider sp)
     {
         var module = GetModule<TRequest, TResponse>(moduleName);
 
-        return module is not null 
-                ? module.HandlePipeline(ctx, next) 
+        return module is not null
+                ? module.HandlePipeline(ctx, next)
                 : next(ctx);
     }
 }

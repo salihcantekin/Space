@@ -180,7 +180,7 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         {
             using var scope = scopeFactory.CreateScope();
 
-            if (token.IsCancellationRequested) 
+            if (token.IsCancellationRequested)
                 return await ValueTask.FromCanceled<TRes>(token);
 
             var result = await spaceRegistry.DispatchHandler(req, handlerName, typeof(TRes), scope.ServiceProvider, token);
@@ -235,13 +235,13 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         {
             using var scope = scopeFactory.CreateScope();
 
-            if (token.IsCancellationRequested) 
-              return;
-            
+            if (token.IsCancellationRequested)
+                return;
+
             var ctx = NotificationContext<TRequest>.Create(scope.ServiceProvider, req, token);
             var vt = spaceRegistry.DispatchNotification(ctx).AwaitAndReturnNotificationInvoke(ctx);
 
-            if (!vt.IsCompletedSuccessfully) 
+            if (!vt.IsCompletedSuccessfully)
                 await vt;
         }
     }

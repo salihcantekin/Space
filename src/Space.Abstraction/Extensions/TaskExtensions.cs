@@ -117,7 +117,7 @@ public static class TaskExtensions
         }
 
         return Await(task);
-        
+
         static async ValueTask<object> Await(ValueTask<TResponse> t)
         {
             var res = await t;
