@@ -33,7 +33,7 @@ public class Bench
     private static readonly MediatorRequest StaticRequest = new(2);
     private static readonly SpaceRequest StaticSpaceRequest = new(2);
 
-    [Params(1)] 
+    [Params(1)]
     public int N;
 
     [GlobalSetup(Targets = [nameof(Space_Res), nameof(Space_ReqRes)])]
@@ -60,7 +60,7 @@ public class Bench
         mediator = sp.GetRequiredService<Mediator.IMediator>();
         services.AddSingleton(typeof(MediatR.IPipelineBehavior<MediatRRequest, CommandResponse>), typeof(MediatRPipeline));
 
-        for (int i = 0; i < 10_000; i++) 
+        for (int i = 0; i < 10_000; i++)
             _ = mediator.Send(new MediatorRequest(2)).GetAwaiter().GetResult();
     }
 

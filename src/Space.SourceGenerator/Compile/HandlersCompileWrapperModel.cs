@@ -4,13 +4,13 @@ using System.Linq;
 namespace Space.SourceGenerator.Compile;
 
 internal static class ObjectNameExtensions
-{ 
+{
     internal static string Globalize(this string objectName)
     {
-        return string.IsNullOrEmpty(objectName) 
-            ? objectName 
-            : objectName.StartsWith("global::") 
-                ? objectName 
+        return string.IsNullOrEmpty(objectName)
+            ? objectName
+            : objectName.StartsWith("global::")
+                ? objectName
                 : $"global::{objectName}";
     }
 }
@@ -100,7 +100,7 @@ public class HandlersCompileWrapperModel
 
             var moduleTypeMatch = moduleCompileModels
                 .Where(c => (c.ResponseType.Contains(handlerCompileModel.ReturnTypeName) || handlerCompileModel.ReturnTypeName.Contains(c.ResponseType)) &&
-                            c.RequestType == handlerCompileModel.RequestParameterTypeName && 
+                            c.RequestType == handlerCompileModel.RequestParameterTypeName &&
                             c.MethodName == handlerCompileModel.MethodName &&
                             c.ClassFullName == handlerCompileModel.ClassFullName);
 

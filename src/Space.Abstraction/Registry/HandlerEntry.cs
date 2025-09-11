@@ -200,7 +200,7 @@ public partial class SpaceRegistry
                 }
 
                 return AwaitFast(vtFast, ctxFast);
-                
+
                 static async ValueTask<object> AwaitFast(ValueTask<TResponse> t, HandlerContext<TRequest> c)
                 {
                     try
@@ -225,7 +225,7 @@ public partial class SpaceRegistry
             }
 
             return Await(vt, ctx);
-            
+
             static async ValueTask<object> Await(ValueTask<TResponse> t, HandlerContext<TRequest> c)
             {
                 try
