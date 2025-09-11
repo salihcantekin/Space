@@ -87,7 +87,7 @@ public static class MethodSymbolExtensions
 
             foreach (var named in attr.NamedArguments)
             {
-                dict[named.Key] = named.Value.Value ?? string.Empty;
+                dict[named.Key] = GetTypedConstantValue(named.Value);
             }
 
             return dict;
@@ -95,6 +95,25 @@ public static class MethodSymbolExtensions
         catch
         {
             return [];
+        }
+    }
+
+    private static object GetTypedConstantValue(TypedConstant typedConstant)
+    {
+        if (typedConstant.Kind == TypedConstantKind.Array)
+        {
+            // Handle array properties
+            var values = new object[typedConstant.Values.Length];
+            for (int i = 0; i < typedConstant.Values.Length; i++)
+            {
+                values[i] = GetTypedConstantValue(typedConstant.Values[i]);
+            }
+            return values;
+        }
+        else
+        {
+            // Handle single values (existing logic)
+            return typedConstant.Value ?? string.Empty;
         }
     }
 
