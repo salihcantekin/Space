@@ -3,6 +3,7 @@ using Space.Abstraction;
 using Space.Abstraction.Attributes;
 using Space.Abstraction.Context;
 using Space.Abstraction.Contracts;
+using Space.Abstraction.Modules.Audit;
 using Space.DependencyInjection;
 using Space.TestConsole.Services;
 
@@ -61,7 +62,7 @@ public class TestHandler
     UserCreateResponse res = new("");
 
     [Handle(IsDefault = true)]
-    //[AuditModule]
+    [AuditModule]
     public ValueTask<UserCreateResponse> Handle(HandlerContext<UserCreateCommand> ctx)
     {
         //var randomNumber = 1; // dataService.GetRandomNumber();
