@@ -68,7 +68,6 @@ public class AuditModuleTests
     {
         using var sp = BuildProvider();
         var space = sp.GetRequiredService<ISpace>();
-        _ = sp.GetRequiredService<AuditHandlers>();
 
         var res = await space.Send<AReq, ARes>(new AReq(1)); // not checking provider behavior, only compilation/registration
         Assert.IsNotNull(res);
@@ -79,7 +78,6 @@ public class AuditModuleTests
     {
         using var sp = BuildProvider();
         var space = sp.GetRequiredService<ISpace>();
-        _ = sp.GetRequiredService<AuditHandlers>();
 
         var res = await space.Send<AReq, ARes>(new AReq(2));
         Assert.IsNotNull(res);
@@ -89,7 +87,6 @@ public class AuditModuleTests
     public void Audit_Global_Default_Applies_When_Attribute_Not_Set_Isolated()
     {
         using var sp = BuildProvider();
-        _ = sp.GetRequiredService<AuditHandlersFallback>();
 
         var module = sp.GetRequiredService<AuditModule>();
         var key = ModuleIdentifier.From<BReq, BRes>(module.GetModuleName(), "Default");
@@ -101,7 +98,6 @@ public class AuditModuleTests
     public void Audit_Attribute_Overrides_Global_Default_Isolated()
     {
         using var sp = BuildProvider();
-        _ = sp.GetRequiredService<AuditHandlersOverride>();
 
         var module = sp.GetRequiredService<AuditModule>();
         var key = ModuleIdentifier.From<CReq, CRes>(module.GetModuleName(), "Default");

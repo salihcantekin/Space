@@ -8,7 +8,7 @@ namespace Space.Abstraction.Context;
 
 public delegate ValueTask<TRes> PipelineDelegate<TReq, TRes>(PipelineContext<TReq> ctx);
 
-public class PipelineContext<TRequest> : BaseContext<TRequest>, IDisposable
+public sealed class PipelineContext<TRequest> : BaseContext<TRequest>, IDisposable
 {
     public PipelineContext() : base() { }
 
@@ -18,6 +18,9 @@ public class PipelineContext<TRequest> : BaseContext<TRequest>, IDisposable
     }
 
     public int Order { get; set; } = 100;
+
+    // Strongly-typed per-invocation carrier to avoid dictionary lookups when calling the final handler from pipeline chain.
+    internal HandlerContext<TRequest> HandlerContextRef;
 
     // Items are pipeline-specific
     private ItemsHolder itemsHolder;
@@ -91,6 +94,8 @@ public class PipelineContext<TRequest> : BaseContext<TRequest>, IDisposable
         this.ServiceProvider = serviceProvider;
         this.Space = space;
 
+        // Reset per-invocation holder
+        HandlerContextRef = null;
         ClearItems();
     }
 

@@ -3,10 +3,8 @@ using System.Threading;
 
 namespace Space.Abstraction.Context;
 
-public class NotificationContext<TRequest> : BaseContext<TRequest>, IDisposable
+public sealed class NotificationContext<TRequest> : BaseContext<TRequest>, IDisposable
 {
-    public string HandlerName { get; set; }
-
     public void Initialize(TRequest request, IServiceProvider serviceProvider, ISpace space, CancellationToken cancellationToken)
     {
         Request = request;

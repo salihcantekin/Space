@@ -95,7 +95,6 @@ public class RetryModuleTests
 
         RetryHandlersDev.Reset();
         var space = sp.GetRequiredService<ISpace>();
-        _ = sp.GetRequiredService<RetryHandlersDev>();
 
         // Fail twice, succeed on third attempt -> total calls should be 3
         var res = await space.Send<RetryReq, RetryRes>(new RetryReq(FailTimes: 2), name: "RetryDev");
@@ -112,7 +111,6 @@ public class RetryModuleTests
 
         RetryHandlersDefault.Reset();
         var space = sp.GetRequiredService<ISpace>();
-        _ = sp.GetRequiredService<RetryHandlersDefault>();
 
         var res = await space.Send<RetryReq, RetryRes>(new RetryReq(FailTimes: 1), name: "RetryDefault");
         Assert.AreEqual(2, res.Attempts);
@@ -131,8 +129,7 @@ public class RetryModuleTests
 
         RetryHandlersDev.Reset();
         var space = sp.GetRequiredService<ISpace>();
-        _ = sp.GetRequiredService<RetryHandlersDev>();
-
+        
         await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
         {
             await space.Send<RetryReq, RetryRes>(new RetryReq(FailTimes: failTimes), name: "RetryDev");
@@ -151,7 +148,7 @@ public class RetryModuleTests
         var space = sp.GetRequiredService<ISpace>();
         _ = sp.GetRequiredService<RetryHandlersOverride>();
 
-        await Assert.ThrowsExceptionAsync<InvalidOperationException>(async () =>
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
         {
             await space.Send<RetryReq, RetryRes>(new RetryReq(FailTimes: 3), name: "RetryOverride");
         });

@@ -112,13 +112,13 @@ namespace Space.DependencyInjection
                     registry.RegisterModule<TReq, TRes>(moduleName, handlerName, profileName);
                 }
 
-                // Notifications
+                // Notifications (unnamed)
                 {{ for n in Notifications }}
                 registry.RegisterNotification<{{ n.RequestParameterTypeName }}>((ctx) =>
                 {
                     var h = ctx.ServiceProvider.GetRequiredService<{{ n.ClassFullName }}>();
                     return h.{{ n.MethodName }}(ctx);
-                }, "{{ n.HandlerName }}");
+                });
                 {{ end }}
 
                 // Handlers / Pipelines / Modules
@@ -133,7 +133,7 @@ namespace Space.DependencyInjection
 
                     {{ for p in h.PipelineCompileModels }}
                     RegPipe<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}, {{ p.ClassFullName }}>("{{ h.HandlerName }}",
-                        new PipelineConfig(){ {{ for prop in p.Properties }} {{ prop.Key }} = {{ prop.Value }},{{ end }} },
+                        new PipelineConfig(){ Order = {{ p.Order }} },
                         (pipe, ctx, next) => {{ if p.IsValueTask }} pipe.{{ p.MethodName }}(ctx, next) {{ else }} VT(pipe.{{ p.MethodName }}(ctx, next)) {{ end }});
                     {{ end }}
 

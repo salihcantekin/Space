@@ -69,8 +69,7 @@ internal static class PipelineScanner
             RequestParameterTypeName = reqType,
             ReturnTypeName = respType,
             Order = order,
-            // Only emit supported PipelineConfig properties
-            Properties = new Dictionary<string, object> { { "Order", order } }
+            Properties = pipelineAttr.GetProperties()
         };
     }
 }

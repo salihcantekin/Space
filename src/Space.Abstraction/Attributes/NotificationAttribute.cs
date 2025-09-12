@@ -5,5 +5,4 @@ namespace Space.Abstraction.Attributes;
 [AttributeUsage(AttributeTargets.Method, Inherited = false)]
 public sealed class NotificationAttribute : Attribute
 {
-    public string HandleName { get; set; }
 }

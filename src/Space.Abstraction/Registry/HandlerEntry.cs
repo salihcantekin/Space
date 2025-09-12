@@ -26,7 +26,11 @@ public partial class SpaceRegistry
         private PipelineContainer[] orderedPipelines; // cached ordered list
         private PipelineDelegate<TRequest, TResponse> cachedRootDelegate; // composed root delegate
         private bool compositionDirty = true;
-        private static readonly object HandlerContextItemKey = new();
+
+        // Added: final handler delegate and single-pipeline fast-path
+        private PipelineDelegate<TRequest, TResponse> cachedFinalDelegate; // calls handlerInvoker with HandlerContextRef
+        private bool singlePipelineFast;
+        private PipelineInvoker<TRequest, TResponse> singlePipelineInvoker;
 
         private sealed class PipelineContainer
         {
@@ -94,29 +98,42 @@ public partial class SpaceRegistry
                     return;
                 }
 
+                // Reset cached compose state
+                cachedRootDelegate = null;
+                cachedFinalDelegate = null;
+                singlePipelineFast = false;
+                singlePipelineInvoker = null;
+
                 if (!hasPipelines || pipelines.Count == 0)
                 {
-                    cachedRootDelegate = null; // no pipeline chain needed
+                    // no pipeline chain needed
                 }
                 else
                 {
                     var ordered = GetOrdered();
 
-                    PipelineDelegate<TRequest, TResponse> root = pc =>
-                    {
-                        var hc = (HandlerContext<TRequest>)pc.GetItem(HandlerContextItemKey);
+                    // Build final delegate once (directly calls handler using HandlerContextRef)
+                    cachedFinalDelegate = pc => handlerInvoker(pc.HandlerContextRef);
 
-                        return handlerInvoker(hc);
-                    };
-
-                    for (int i = ordered.Length - 1; i >= 0; i--)
+                    if (ordered.Length == 1)
                     {
-                        var current = ordered[i];
-                        var next = root;
-                        root = (ctx) => current.Invoker(ctx, next);
+                        // Single-pipeline fast path
+                        singlePipelineFast = true;
+                        singlePipelineInvoker = ordered[0].Invoker;
                     }
+                    else
+                    {
+                        // Compose full chain for 2+ pipelines
+                        PipelineDelegate<TRequest, TResponse> root = cachedFinalDelegate;
+                        for (int i = ordered.Length - 1; i >= 0; i--)
+                        {
+                            var current = ordered[i];
+                            var next = root;
+                            root = (ctx) => current.Invoker(ctx, next);
+                        }
 
-                    cachedRootDelegate = root;
+                        cachedRootDelegate = root;
+                    }
                 }
 
                 compositionDirty = false;
@@ -153,9 +170,11 @@ public partial class SpaceRegistry
             EnsureComposed();
 
             var pipelineContext = handlerContext.ToPipelineContext();
-            pipelineContext.SetItem(HandlerContextItemKey, handlerContext);
+            pipelineContext.HandlerContextRef = handlerContext; // set ref for final handler
 
-            var vt = cachedRootDelegate(pipelineContext);
+            ValueTask<TResponse> vt = singlePipelineFast
+                ? singlePipelineInvoker(pipelineContext, cachedFinalDelegate)
+                : cachedRootDelegate(pipelineContext);
 
             if (vt.IsCompletedSuccessfully)
             {
