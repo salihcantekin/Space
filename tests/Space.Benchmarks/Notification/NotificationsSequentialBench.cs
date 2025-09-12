@@ -16,9 +16,9 @@ using Space.DependencyInjection;
 [MemoryDiagnoser]
 public class NotificationsSequentialBench
 {
-    private ISpace _space = default!;
-    private Mediator.IPublisher _mediatorPublisher = default!;
-    private MediatR.IMediator _mediatR = default!; // IMediator has Publish
+    private ISpace space = default!;
+    private Mediator.IPublisher mediatorPublisher = default!;
+    private MediatR.IMediator mediatR = default!; // IMediator has Publish
 
     private static readonly N_Event Event = new(5);
 
@@ -32,41 +32,42 @@ public class NotificationsSequentialBench
             opt.ServiceLifetime = ServiceLifetime.Singleton;
             opt.NotificationDispatchType = NotificationDispatchType.Sequential;
         });
+
         var spProvider = spServices.BuildServiceProvider();
-        _space = spProvider.GetRequiredService<ISpace>();
+        space = spProvider.GetRequiredService<ISpace>();
 
         // Mediator with notifications
         var medServices = new ServiceCollection();
         medServices.AddMediator(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
         var medProvider = medServices.BuildServiceProvider();
-        _mediatorPublisher = medProvider.GetRequiredService<Mediator.IPublisher>();
+        mediatorPublisher = medProvider.GetRequiredService<Mediator.IPublisher>();
 
         // MediatR with notifications
         var mrServices = new ServiceCollection();
         mrServices.AddMediatR(Assembly.GetExecutingAssembly());
         var mrProvider = mrServices.BuildServiceProvider();
-        _mediatR = mrProvider.GetRequiredService<MediatR.IMediator>();
+        mediatR = mrProvider.GetRequiredService<MediatR.IMediator>();
 
         // Warm-up
         for (int i = 0; i < 5_000; i++)
         {
-            _space.Publish(Event).GetAwaiter().GetResult();
-            _mediatorPublisher.Publish(Event, CancellationToken.None).GetAwaiter().GetResult();
-            _mediatR.Publish(Event).GetAwaiter().GetResult();
+            space.Publish(Event).GetAwaiter().GetResult();
+            mediatorPublisher.Publish(Event, CancellationToken.None).GetAwaiter().GetResult();
+            mediatR.Publish(Event).GetAwaiter().GetResult();
         }
     }
 
     [Benchmark]
     public ValueTask Space_Publish()
-        => _space.Publish(Event);
+        => space.Publish(Event);
 
     [Benchmark]
     public ValueTask Mediator_Publish()
-        => _mediatorPublisher.Publish(Event, CancellationToken.None);
+        => mediatorPublisher.Publish(Event, CancellationToken.None);
 
     [Benchmark]
     public Task MediatR_Publish()
-        => _mediatR.Publish(Event);
+        => mediatR.Publish(Event);
 }
 
 // Space notifications (two subscribers)

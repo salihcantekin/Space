@@ -3,7 +3,7 @@ using Space.Abstraction.Extensions;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using Space.Abstraction; // for NotificationDispatchType
+using Space.Abstraction;
 
 namespace Space.DependencyInjection;
 
@@ -13,11 +13,10 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
 
     private static class EntryCache<TReq, TRes>
     {
-        internal static SpaceRegistry.HandlerEntry<TReq, TRes> UnnamedEntry;
-        internal static int UnnamedRegistryId;
-        internal static SpaceRegistry.HandlerEntry<TReq, TRes> NamedEntry;
-        internal static string NamedKey;
-        internal static int NamedRegistryId;
+        internal static SpaceRegistry.HandlerEntry<TReq, TRes> Entry;          // unnamed fast path
+        internal static SpaceRegistry.HandlerEntry<TReq, TRes> NamedEntry;     // last named fast path
+        internal static string NamedKey;                                       // last name used
+        internal static bool Initialized;
     }
 
     private static class ObjectEntryCache
@@ -45,12 +44,11 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
 
         if (IsFastPath(spaceRegistry.HandlerLifetime))
         {
-            int rid = spaceRegistry.RegistryId;
-
+            // Unnamed fast path: use Entry cache
             if (string.IsNullOrEmpty(name))
             {
-                var cached = EntryCache<TRequest, TResponse>.UnnamedEntry;
-                if (cached != null && EntryCache<TRequest, TResponse>.UnnamedRegistryId == rid)
+                var cached = EntryCache<TRequest, TResponse>.Entry;
+                if (cached != null)
                 {
                     if (cached.HasLightInvoker)
                         return cached.InvokeLight(rootProvider, this, request, ct);
@@ -59,10 +57,10 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
                     return cached.Invoke(ctxCached).AwaitAndReturnHandlerInvoke(ctxCached);
                 }
 
-                if (spaceRegistry.TryGetHandlerEntry<TRequest, TResponse>(null, out var first))
+                if (!EntryCache<TRequest, TResponse>.Initialized && spaceRegistry.TryGetHandlerEntry<TRequest, TResponse>(null, out var first))
                 {
-                    EntryCache<TRequest, TResponse>.UnnamedEntry = first;
-                    EntryCache<TRequest, TResponse>.UnnamedRegistryId = rid;
+                    EntryCache<TRequest, TResponse>.Entry = first;
+                    EntryCache<TRequest, TResponse>.Initialized = true;
 
                     if (first.HasLightInvoker)
                         return first.InvokeLight(rootProvider, this, request, ct);
@@ -73,24 +71,20 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
             }
             else
             {
-                if (EntryCache<TRequest, TResponse>.NamedKey == name && EntryCache<TRequest, TResponse>.NamedRegistryId == rid)
+                // Named fast path: remember last used named entry for this TReq/TRes
+                if (EntryCache<TRequest, TResponse>.NamedKey == name && EntryCache<TRequest, TResponse>.NamedEntry is { } namedCached)
                 {
-                    var namedCached = EntryCache<TRequest, TResponse>.NamedEntry;
-                    if (namedCached != null)
-                    {
-                        if (namedCached.HasLightInvoker)
-                            return namedCached.InvokeLight(rootProvider, this, request, ct);
+                    if (namedCached.HasLightInvoker)
+                        return namedCached.InvokeLight(rootProvider, this, request, ct);
 
-                        var ctxNamed = HandlerContext<TRequest>.Create(rootProvider, request, ct);
-                        return namedCached.Invoke(ctxNamed).AwaitAndReturnHandlerInvoke(ctxNamed);
-                    }
+                    var ctxNamed = HandlerContext<TRequest>.Create(rootProvider, request, ct);
+                    return namedCached.Invoke(ctxNamed).AwaitAndReturnHandlerInvoke(ctxNamed);
                 }
 
                 if (spaceRegistry.TryGetHandlerEntry<TRequest, TResponse>(name, out var named))
                 {
                     EntryCache<TRequest, TResponse>.NamedKey = name;
                     EntryCache<TRequest, TResponse>.NamedEntry = named;
-                    EntryCache<TRequest, TResponse>.NamedRegistryId = rid;
 
                     if (named.HasLightInvoker)
                         return named.InvokeLight(rootProvider, this, request, ct);
@@ -258,12 +252,6 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
     #endregion
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ValueTask<TResponse> Send<TResponse>(IRequest<TResponse> request, string name = null, CancellationToken ct = default)
-        => Send<TResponse>((object)request, name, ct);
-
-    #region Publish
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ValueTask Publish<TRequest>(TRequest request, CancellationToken ct = default)
     {
         if (ct.IsCancellationRequested)
@@ -272,7 +260,8 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         if (IsFastPath(spaceRegistry.HandlerLifetime))
         {
             var ctxFast = NotificationContext<TRequest>.Create(rootProvider, request, ct);
-            return spaceRegistry.DispatchNotification(ctxFast).AwaitAndReturnNotificationInvoke(ctxFast);
+            var vt = spaceRegistry.FastDispatchNotification(ctxFast).AwaitAndReturnNotificationInvoke(ctxFast);
+            return vt;
         }
 
         return SlowPublishScoped(request, ct);
@@ -301,7 +290,8 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         if (IsFastPath(spaceRegistry.HandlerLifetime))
         {
             var ctxFast = NotificationContext<TRequest>.Create(rootProvider, request, ct);
-            return spaceRegistry.DispatchNotification(ctxFast, dispatchType).AwaitAndReturnNotificationInvoke(ctxFast);
+            var vt = spaceRegistry.FastDispatchNotification(ctxFast, dispatchType).AwaitAndReturnNotificationInvoke(ctxFast);
+            return vt;
         }
 
         return SlowPublishScoped(request, dispatchType, ct);
@@ -321,5 +311,4 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         }
     }
 
-    #endregion
 }

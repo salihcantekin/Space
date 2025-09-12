@@ -121,13 +121,27 @@ namespace Space.DependencyInjection
                     registry.RegisterModule<TReq, TRes>(moduleName, handlerName, profileName);
                 }
 
+                // New: notifications registrar using runtime singleton flag
+                void RegNotification<TReq, THandler>(Func<THandler, NotificationContext<TReq>, ValueTask> call)
+                {
+                    if (isSingleton)
+                    {
+                        var inst = sp.GetRequiredService<THandler>();
+                        registry.RegisterNotification<TReq>(ctx => call(inst, ctx));
+                    }
+                    else
+                    {
+                        registry.RegisterNotification<TReq>(ctx =>
+                        {
+                            var h = ctx.ServiceProvider.GetRequiredService<THandler>();
+                            return call(h, ctx);
+                        });
+                    }
+                }
+
                 // Notifications (unnamed)
                 {{ for n in Notifications }}
-                registry.RegisterNotification<{{ n.RequestParameterTypeName }}>((ctx) =>
-                {
-                    var h = ctx.ServiceProvider.GetRequiredService<{{ n.ClassFullName }}>();
-                    return h.{{ n.MethodName }}(ctx);
-                });
+                RegNotification<{{ n.RequestParameterTypeName }}, {{ n.ClassFullName }}>((inst, ctx) => inst.{{ n.MethodName }}(ctx));
                 {{ end }}
 
                 // Handlers / Pipelines / Modules

@@ -69,7 +69,7 @@ public class NotificationTests
     {
         // Arrange
         bool called = false;
-        NotificationContext<int>? receivedCtx = null;
+        NotificationContext<int> receivedCtx = null;
         notificatonHandler.OnIntFunc = ctx =>
         {
             called = true;

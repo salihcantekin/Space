@@ -60,8 +60,8 @@ public partial class SpaceRegistry
             this.lightInvoker = lightInvoker;
 
             pipelines = pipelineInvokers != null
-                ? new List<PipelineContainer>(pipelineInvokers.Select(p => new PipelineContainer(p.config, p.invoker)))
-                : new List<PipelineContainer>();
+                ? [.. pipelineInvokers.Select(p => new PipelineContainer(p.config, p.invoker))]
+                : [];
 
             hasPipelines = pipelines.Count > 0;
         }

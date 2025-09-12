@@ -49,7 +49,7 @@ public partial class SpaceRegistry
     public void RegisterPipeline<TRequest, TResponse>(string handlerName, PipelineConfig pipelineConfig,
         PipelineInvoker<TRequest, TResponse> pipeline)
     {
-        handlerRegistry.RegisterPipeline<TRequest, TResponse>(handlerName, pipelineConfig, pipeline);
+        handlerRegistry.RegisterPipeline(handlerName, pipelineConfig, pipeline);
     }
 
     public void RegisterHandler<TRequest, TResponse>(
@@ -74,7 +74,7 @@ public partial class SpaceRegistry
         }
 
         handlerRegistry.RegisterPipeline<TRequest, TResponse>(handlerName, new PipelineConfig(order),
-            (ctx, next) => moduleFactory.Invoke(moduleName, profileName, ctx, next));
+            (ctx, next) => moduleFactory.Invoke<TRequest, TResponse>(moduleName, profileName, ctx, next));
     }
 
     // Lightweight handler entry access for fast path
@@ -120,6 +120,15 @@ public partial class SpaceRegistry
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ValueTask DispatchNotification<TRequest>(NotificationContext<TRequest> ctx, NotificationDispatchType dispatchType)
         => notificationRegistry.DispatchNotification(ctx, dispatchType);
+
+    // Fast notification dispatch wrappers (avoid reflection in Space)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal ValueTask FastDispatchNotification<TRequest>(NotificationContext<TRequest> ctx)
+        => notificationRegistry.FastDispatch(ctx);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal ValueTask FastDispatchNotification<TRequest>(NotificationContext<TRequest> ctx, NotificationDispatchType dispatchType)
+        => notificationRegistry.FastDispatch(ctx, dispatchType);
 
     public void CompleteRegistration()
     {
