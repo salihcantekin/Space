@@ -121,19 +121,21 @@ public class RetryModuleTests
     [TestMethod]
     public async Task Retry_Fails_When_RetryCount_Insufficient()
     {
+        // Arrange
+        int retryCount = 1;
+        int failTimes = 2 + retryCount; // initial call + retries
         using var sp = BuildProvider(opt =>
         {
-            opt.WithProfile("Dev", o => { o.RetryCount = 1; o.DelayMilliseconds = 0; });
+            opt.WithProfile("Dev", o => { o.RetryCount = retryCount; o.DelayMilliseconds = 0; });
         });
 
         RetryHandlersDev.Reset();
         var space = sp.GetRequiredService<ISpace>();
         _ = sp.GetRequiredService<RetryHandlersDev>();
 
-        await Assert.ThrowsExceptionAsync<InvalidOperationException>(async () =>
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
         {
-            // Needs 3 attempts to succeed but only 1 allowed
-            await space.Send<RetryReq, RetryRes>(new RetryReq(FailTimes: 2), name: "RetryDev");
+            await space.Send<RetryReq, RetryRes>(new RetryReq(FailTimes: failTimes), name: "RetryDev");
         });
     }
 
@@ -151,7 +153,7 @@ public class RetryModuleTests
 
         await Assert.ThrowsExceptionAsync<InvalidOperationException>(async () =>
         {
-            await space.Send<RetryReq, RetryRes>(new RetryReq(FailTimes: 2), name: "RetryOverride");
+            await space.Send<RetryReq, RetryRes>(new RetryReq(FailTimes: 3), name: "RetryOverride");
         });
     }
 }
