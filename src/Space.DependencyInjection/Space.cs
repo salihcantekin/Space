@@ -13,8 +13,11 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
 
     private static class EntryCache<TReq, TRes>
     {
-        internal static SpaceRegistry.HandlerEntry<TReq, TRes> Entry;
-        internal static bool Initialized;
+        internal static SpaceRegistry.HandlerEntry<TReq, TRes> UnnamedEntry;
+        internal static int UnnamedRegistryId;
+        internal static SpaceRegistry.HandlerEntry<TReq, TRes> NamedEntry;
+        internal static string NamedKey;
+        internal static int NamedRegistryId;
     }
 
     private static class ObjectEntryCache
@@ -42,32 +45,63 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
 
         if (IsFastPath(spaceRegistry.HandlerLifetime))
         {
-            var cached = EntryCache<TRequest, TResponse>.Entry;
-            if (cached != null)
+            int rid = spaceRegistry.RegistryId;
+
+            if (string.IsNullOrEmpty(name))
             {
-                if (cached.HasLightInvoker)
-                    return cached.InvokeLight(rootProvider, this, request, ct);
+                var cached = EntryCache<TRequest, TResponse>.UnnamedEntry;
+                if (cached != null && EntryCache<TRequest, TResponse>.UnnamedRegistryId == rid)
+                {
+                    if (cached.HasLightInvoker)
+                        return cached.InvokeLight(rootProvider, this, request, ct);
 
-                var ctxCached = HandlerContext<TRequest>.Create(rootProvider, request, ct);
+                    var ctxCached = HandlerContext<TRequest>.Create(rootProvider, request, ct);
+                    return cached.Invoke(ctxCached).AwaitAndReturnHandlerInvoke(ctxCached);
+                }
 
-                return spaceRegistry.DispatchHandler<TRequest, TResponse>(rootProvider, ctxCached, name).AwaitAndReturnHandlerInvoke(ctxCached);
+                if (spaceRegistry.TryGetHandlerEntry<TRequest, TResponse>(null, out var first))
+                {
+                    EntryCache<TRequest, TResponse>.UnnamedEntry = first;
+                    EntryCache<TRequest, TResponse>.UnnamedRegistryId = rid;
+
+                    if (first.HasLightInvoker)
+                        return first.InvokeLight(rootProvider, this, request, ct);
+
+                    var ctxFirst = HandlerContext<TRequest>.Create(rootProvider, request, ct);
+                    return first.Invoke(ctxFirst).AwaitAndReturnHandlerInvoke(ctxFirst);
+                }
+            }
+            else
+            {
+                if (EntryCache<TRequest, TResponse>.NamedKey == name && EntryCache<TRequest, TResponse>.NamedRegistryId == rid)
+                {
+                    var namedCached = EntryCache<TRequest, TResponse>.NamedEntry;
+                    if (namedCached != null)
+                    {
+                        if (namedCached.HasLightInvoker)
+                            return namedCached.InvokeLight(rootProvider, this, request, ct);
+
+                        var ctxNamed = HandlerContext<TRequest>.Create(rootProvider, request, ct);
+                        return namedCached.Invoke(ctxNamed).AwaitAndReturnHandlerInvoke(ctxNamed);
+                    }
+                }
+
+                if (spaceRegistry.TryGetHandlerEntry<TRequest, TResponse>(name, out var named))
+                {
+                    EntryCache<TRequest, TResponse>.NamedKey = name;
+                    EntryCache<TRequest, TResponse>.NamedEntry = named;
+                    EntryCache<TRequest, TResponse>.NamedRegistryId = rid;
+
+                    if (named.HasLightInvoker)
+                        return named.InvokeLight(rootProvider, this, request, ct);
+
+                    var ctxNamed2 = HandlerContext<TRequest>.Create(rootProvider, request, ct);
+                    return named.Invoke(ctxNamed2).AwaitAndReturnHandlerInvoke(ctxNamed2);
+                }
             }
 
-            if (!EntryCache<TRequest, TResponse>.Initialized && spaceRegistry.TryGetHandlerEntry<TRequest, TResponse>(name, out var first))
-            {
-                EntryCache<TRequest, TResponse>.Entry = first;
-                EntryCache<TRequest, TResponse>.Initialized = true;
-
-                if (first.HasLightInvoker)
-                    return first.InvokeLight(rootProvider, this, request, ct);
-
-                var ctxFirst = HandlerContext<TRequest>.Create(rootProvider, request, ct);
-
-                return spaceRegistry.DispatchHandler<TRequest, TResponse>(rootProvider, ctxFirst, name).AwaitAndReturnHandlerInvoke(ctxFirst);
-            }
-
+            // Fallback: legacy registry path
             var ctx = HandlerContext<TRequest>.Create(rootProvider, request, ct);
-
             return spaceRegistry.DispatchHandler<TRequest, TResponse>(rootProvider, ctx, name).AwaitAndReturnHandlerInvoke(ctx);
         }
 
@@ -78,25 +112,37 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         if (ct.IsCancellationRequested)
         {
             scope.Dispose();
-
             return ValueTask.FromCanceled<TResponse>(ct);
         }
 
-        if (spaceRegistry.TryGetHandlerEntry<TRequest, TResponse>(name, out var scopedEntry) && scopedEntry.IsPipelineFree)
+        if (spaceRegistry.TryGetHandlerEntry<TRequest, TResponse>(name, out var scopedEntry))
         {
-            var lite = scopedEntry.InvokeLight(sp, this, request, ct);
-
-            if (lite.IsCompletedSuccessfully)
+            if (scopedEntry.IsPipelineFree)
             {
-                scope.Dispose();
-                return lite;
+                var lite = scopedEntry.InvokeLight(sp, this, request, ct);
+
+                if (lite.IsCompletedSuccessfully)
+                {
+                    scope.Dispose();
+                    return lite;
+                }
+
+                return AwaitLite(lite, scope);
             }
 
-            return AwaitLite(lite, scope);
+            var scopedCtxDirect = HandlerContext<TRequest>.Create(sp, request, ct);
+            var scopedVtDirect = scopedEntry.Invoke(scopedCtxDirect).AwaitAndReturnHandlerInvoke(scopedCtxDirect);
+
+            if (scopedVtDirect.IsCompletedSuccessfully)
+            {
+                scope.Dispose();
+                return scopedVtDirect;
+            }
+
+            return Await(scopedVtDirect, scope);
         }
 
         var scopedCtx = HandlerContext<TRequest>.Create(sp, request, ct);
-
         var scopedVt = spaceRegistry.DispatchHandler<TRequest, TResponse>(sp, scopedCtx, name).AwaitAndReturnHandlerInvoke(scopedCtx);
 
         if (scopedVt.IsCompletedSuccessfully)

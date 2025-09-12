@@ -100,11 +100,20 @@ namespace Space.DependencyInjection
 
                 void RegPipe<TReq, TRes, TPipe>(string handlerName, PipelineConfig cfg, Func<TPipe, PipelineContext<TReq>, PipelineDelegate<TReq, TRes>, ValueTask<TRes>> invoker)
                 {
-                    registry.RegisterPipeline<TReq, TRes>(handlerName, cfg, (ctx, next) =>
+                    if (isSingleton)
                     {
-                        var pipe = ctx.ServiceProvider.GetRequiredService<TPipe>();
-                        return invoker(pipe, ctx, next);
-                    });
+                        // Cache pipeline instance once for singleton lifetime to avoid per-call DI resolution
+                        var pipeInstance = sp.GetRequiredService<TPipe>();
+                        registry.RegisterPipeline<TReq, TRes>(handlerName, cfg, (ctx, next) => invoker(pipeInstance, ctx, next));
+                    }
+                    else
+                    {
+                        registry.RegisterPipeline<TReq, TRes>(handlerName, cfg, (ctx, next) =>
+                        {
+                            var pipe = ctx.ServiceProvider.GetRequiredService<TPipe>();
+                            return invoker(pipe, ctx, next);
+                        });
+                    }
                 }
 
                 void RegModule<TReq, TRes>(string handlerName, string moduleName)
