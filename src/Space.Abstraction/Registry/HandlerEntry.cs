@@ -15,20 +15,29 @@ public delegate ValueTask<TResponse> PipelineInvoker<TRequest, TResponse>(Pipeli
 
 public partial class SpaceRegistry
 {
-    internal sealed class HandlerEntry<TRequest, TResponse> : IObjectHandlerEntry
+    internal abstract class HandlerEntry<TRequest, TResponse> : IObjectHandlerEntry
     {
-        private readonly HandlerInvoker<TRequest, TResponse> handlerInvoker;
-        private readonly LightHandlerInvoker<TRequest, TResponse> lightInvoker;
-        private readonly List<PipelineContainer> pipelines;
-        private bool hasPipelines; // must be mutable to reflect late pipeline registration
+        protected readonly HandlerInvoker<TRequest, TResponse> handlerInvoker;
+        protected readonly LightHandlerInvoker<TRequest, TResponse> lightInvoker;
+        protected readonly List<PipelineContainer> pipelines;
+        protected bool hasPipelines; // must be mutable to reflect late pipeline registration
 
         private readonly object composeLock = new();
         private PipelineContainer[] orderedPipelines; // cached ordered list
-        private PipelineDelegate<TRequest, TResponse> cachedRootDelegate; // composed root delegate
         private bool compositionDirty = true;
-        private static readonly object HandlerContextItemKey = new();
 
-        private sealed class PipelineContainer
+        // Composed root pipeline delegate (for 1+ pipelines)
+        private PipelineDelegate<TRequest, TResponse> cachedRootDelegate;
+
+        // Single composed invoker over HandlerContext to minimize branching in Invoke
+        private HandlerInvoker<TRequest, TResponse> composedInvoke;
+
+        // Single-pipeline fast path fields
+        private bool singlePipelineFast;
+        private PipelineInvoker<TRequest, TResponse> singlePipelineInvoker;
+        private PipelineDelegate<TRequest, TResponse> cachedFinalDelegate; // calls handlerInvoker with HandlerContextRef
+
+        protected sealed class PipelineContainer
         {
             internal PipelineConfig Config { get; }
             internal PipelineInvoker<TRequest, TResponse> Invoker { get; }
@@ -42,7 +51,7 @@ public partial class SpaceRegistry
         internal bool IsPipelineFree => !hasPipelines;
         internal bool HasLightInvoker => lightInvoker != null && !hasPipelines;
 
-        internal HandlerEntry(
+        protected HandlerEntry(
             HandlerInvoker<TRequest, TResponse> handlerInvoker,
             LightHandlerInvoker<TRequest, TResponse> lightInvoker,
             IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelineInvokers)
@@ -80,7 +89,7 @@ public partial class SpaceRegistry
             return orderedPipelines;
         }
 
-        private void EnsureComposed()
+        protected void EnsureComposed()
         {
             if (!compositionDirty)
             {
@@ -94,29 +103,74 @@ public partial class SpaceRegistry
                     return;
                 }
 
+                cachedRootDelegate = null;
+                composedInvoke = null;
+                singlePipelineFast = false;
+                singlePipelineInvoker = null;
+                cachedFinalDelegate = null;
+
                 if (!hasPipelines || pipelines.Count == 0)
                 {
-                    cachedRootDelegate = null; // no pipeline chain needed
+                    // No pipeline chain: composed is just the handler invoker
+                    composedInvoke = handlerInvoker;
                 }
                 else
                 {
                     var ordered = GetOrdered();
 
-                    PipelineDelegate<TRequest, TResponse> root = pc =>
-                    {
-                        var hc = (HandlerContext<TRequest>)pc.GetItem(HandlerContextItemKey);
+                    // final delegate: invoke the handler with the pre-set HandlerContextRef
+                    cachedFinalDelegate = pc => handlerInvoker(pc.HandlerContextRef);
 
-                        return handlerInvoker(hc);
-                    };
-
-                    for (int i = ordered.Length - 1; i >= 0; i--)
+                    if (ordered.Length == 1)
                     {
-                        var current = ordered[i];
-                        var next = root;
-                        root = (ctx) => current.Invoker(ctx, next);
+                        singlePipelineFast = true;
+                        singlePipelineInvoker = ordered[0].Invoker;
+
+                        composedInvoke = (ctx) =>
+                        {
+                            // Inline ToPipelineContext to avoid extra call
+                            var pc = PipelineContextPool<TRequest>.Get(ctx.Request, ctx.ServiceProvider, ctx.Space, ctx.CancellationToken);
+                            pc.HandlerContextRef = ctx;
+
+                            var vt = singlePipelineInvoker(pc, cachedFinalDelegate);
+                            if (vt.IsCompletedSuccessfully)
+                            {
+                                PipelineContextPool<TRequest>.Return(pc);
+                                return vt;
+                            }
+                            return vt.AwaitAndReturnPipelineInvoke(pc);
+                        };
                     }
+                    else
+                    {
+                        // Compose full chain including final handler (via HandlerContextRef)
+                        PipelineDelegate<TRequest, TResponse> root = cachedFinalDelegate;
 
-                    cachedRootDelegate = root;
+                        for (int i = ordered.Length - 1; i >= 0; i--)
+                        {
+                            var current = ordered[i];
+                            var next = root;
+                            root = (pctx) => current.Invoker(pctx, next);
+                        }
+
+                        cachedRootDelegate = root;
+
+                        // Compose a single invoker over HandlerContext that handles PipelineContext pooling
+                        composedInvoke = (ctx) =>
+                        {
+                            // Inline ToPipelineContext to avoid extra call
+                            var pc = PipelineContextPool<TRequest>.Get(ctx.Request, ctx.ServiceProvider, ctx.Space, ctx.CancellationToken);
+                            pc.HandlerContextRef = ctx;
+
+                            var vt = cachedRootDelegate(pc);
+                            if (vt.IsCompletedSuccessfully)
+                            {
+                                PipelineContextPool<TRequest>.Return(pc);
+                                return vt;
+                            }
+                            return vt.AwaitAndReturnPipelineInvoke(pc);
+                        };
+                    }
                 }
 
                 compositionDirty = false;
@@ -141,30 +195,11 @@ public partial class SpaceRegistry
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ValueTask<TResponse> Invoke(HandlerContext<TRequest> handlerContext)
+        public virtual ValueTask<TResponse> Invoke(HandlerContext<TRequest> handlerContext)
         {
             handlerContext.CancellationToken.ThrowIfCancellationRequested();
-
-            if (!hasPipelines)
-            {
-                return handlerInvoker(handlerContext);
-            }
-
             EnsureComposed();
-
-            var pipelineContext = handlerContext.ToPipelineContext();
-            pipelineContext.SetItem(HandlerContextItemKey, handlerContext);
-
-            var vt = cachedRootDelegate(pipelineContext);
-
-            if (vt.IsCompletedSuccessfully)
-            {
-                PipelineContextPool<TRequest>.Return(pipelineContext);
-
-                return vt;
-            }
-
-            return vt.AwaitAndReturnPipelineInvoke(pipelineContext);
+            return composedInvoke(handlerContext);
         }
 
         public ValueTask<object> InvokeObject(HandlerContextStruct handlerContext)
@@ -183,7 +218,6 @@ public partial class SpaceRegistry
                 static async ValueTask<object> AwaitLight(ValueTask<TResponse> t)
                 {
                     var r = await t;
-
                     return (object)r!;
                 }
             }
@@ -203,14 +237,8 @@ public partial class SpaceRegistry
 
                 static async ValueTask<object> AwaitFast(ValueTask<TResponse> t, HandlerContext<TRequest> c)
                 {
-                    try
-                    {
-                        return (object)await t;
-                    }
-                    finally
-                    {
-                        HandlerContextPool<TRequest>.Return(c);
-                    }
+                    try { return (object)await t; }
+                    finally { HandlerContextPool<TRequest>.Return(c); }
                 }
             }
 
@@ -228,15 +256,28 @@ public partial class SpaceRegistry
 
             static async ValueTask<object> Await(ValueTask<TResponse> t, HandlerContext<TRequest> c)
             {
-                try
-                {
-                    return (object)await t;
-                }
-                finally
-                {
-                    HandlerContextPool<TRequest>.Return(c);
-                }
+                try { return (object)await t; }
+                finally { HandlerContextPool<TRequest>.Return(c); }
             }
         }
+    }
+
+    // Specialized entries (currently behavior is the same because DI differences are handled by generator; kept for future specialization)
+    internal sealed class SingletonHandlerEntry<TRequest, TResponse> : HandlerEntry<TRequest, TResponse>
+    {
+        public SingletonHandlerEntry(HandlerInvoker<TRequest, TResponse> handlerInvoker,
+                                     LightHandlerInvoker<TRequest, TResponse> lightInvoker,
+                                     IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelineInvokers)
+            : base(handlerInvoker, lightInvoker, pipelineInvokers) { }
+
+        // In future, override Invoke to use thread-static contexts or other singleton-specific tricks
+    }
+
+    internal sealed class ScopedHandlerEntry<TRequest, TResponse> : HandlerEntry<TRequest, TResponse>
+    {
+        public ScopedHandlerEntry(HandlerInvoker<TRequest, TResponse> handlerInvoker,
+                                  LightHandlerInvoker<TRequest, TResponse> lightInvoker,
+                                  IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelineInvokers)
+            : base(handlerInvoker, lightInvoker, pipelineInvokers) { }
     }
 }

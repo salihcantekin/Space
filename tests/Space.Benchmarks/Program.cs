@@ -1,141 +1,147 @@
-﻿// See https://aka.ms/new-console-template for more information
-using BenchmarkDotNet.Attributes;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
+using System.Runtime.InteropServices;
+using BenchmarkDotNet.Configs;
+using BenchmarkDotNet.Exporters;
+using BenchmarkDotNet.Exporters.Csv;
+using BenchmarkDotNet.Loggers;
 using BenchmarkDotNet.Running;
-using Mediator;
-using MediatR;
-using Microsoft.Extensions.DependencyInjection;
-using Space.Abstraction;
-using Space.Abstraction.Attributes;
-using Space.Abstraction.Context;
-using Space.DependencyInjection;
-using System.Reflection;
+using BenchmarkDotNet.Reports;
 
-BenchmarkRunner.Run<Bench>();
-return;
+namespace Space.Benchmarks;
 
-var services = new ServiceCollection();
-services.AddSpace(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
-
-var sp = services.BuildServiceProvider();
-var space = sp.GetRequiredService<ISpace>();
-var res = await space.Send<CommandResponse>(new SpaceRequest(2));
-
-Console.WriteLine("Res: " + res);
-
-[SimpleJob]
-[MemoryDiagnoser]
-public class Bench
+public static class Program
 {
-    private ISpace space;
-    private Mediator.IMediator mediator;
-    private MediatR.IMediator mediatR;
-
-    private static readonly MediatorRequest StaticRequest = new(2);
-    private static readonly SpaceRequest StaticSpaceRequest = new(2);
-
-    [Params(1)]
-    public int N;
-
-    [GlobalSetup(Targets = [nameof(Space_Res), nameof(Space_ReqRes)])]
-    public void SpaceSetup()
+    public static void Main(string[] args)
     {
-        var services = new ServiceCollection();
-        services.AddSpace(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
-        var sp = services.BuildServiceProvider();
-        space = sp.GetRequiredService<ISpace>();
+        var config = CreateConfig(out var outputDir);
 
-        // Pool warmup: create & return contexts a number of times so steady-state ölçülsün
-        for (int i = 0; i < 10_000; i++)
+        // Run all benchmarks and collect summaries
+        var summaries = BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args, config);
+
+        // Write a simple meta.md with date/branch/commit and system info
+        try
         {
-            _ = space.Send<SpaceRequest, CommandResponse>(StaticSpaceRequest).GetAwaiter().GetResult();
+            WriteMeta(outputDir, summaries);
+            Console.WriteLine($"Benchmark reports written to: {outputDir}");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Failed to write meta report: {ex}");
         }
     }
 
-    [GlobalSetup(Targets = [nameof(SendMediator)])]
-    public void MediatorSetup()
+    private static IConfig CreateConfig(out string outputDir)
     {
-        var services = new ServiceCollection();
-        services.AddMediator(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
-        var sp = services.BuildServiceProvider();
-        mediator = sp.GetRequiredService<Mediator.IMediator>();
-        services.AddSingleton(typeof(MediatR.IPipelineBehavior<MediatRRequest, CommandResponse>), typeof(MediatRPipeline));
+        // Prefer CI workspace; fallback to current dir
+        var repoRoot = Environment.GetEnvironmentVariable("GITHUB_WORKSPACE")
+                        ?? Directory.GetCurrentDirectory();
 
-        for (int i = 0; i < 10_000; i++)
-            _ = mediator.Send(new MediatorRequest(2)).GetAwaiter().GetResult();
+        var (branch, commit) = GetGitInfo();
+        var dateStamp = DateTime.UtcNow.ToString("yyyy-MM-dd_HH-mm-ss", CultureInfo.InvariantCulture);
+
+        // You can change this folder to docs/benchmarks if you want them committed into repo
+        outputDir = Path.Combine(repoRoot, "BenchmarkReports", $"{dateStamp}_{branch}_{commit}");
+        Directory.CreateDirectory(outputDir);
+
+        var cfg = ManualConfig.Create(DefaultConfig.Instance)
+            .WithArtifactsPath(outputDir)
+            .WithCultureInfo(CultureInfo.InvariantCulture)
+            .AddLogger(ConsoleLogger.Default)
+            .AddExporter(MarkdownExporter.GitHub) // GitHub-flavored markdown per summary
+            .AddExporter(HtmlExporter.Default)    // HTML report per summary
+            .AddExporter(CsvExporter.Default);    // CSV per summary
+
+        return cfg;
     }
 
-    [GlobalSetup]
-    public void MediatRSetup()
+    private static (string Branch, string Commit) GetGitInfo()
     {
-        var services = new ServiceCollection();
-        services.AddMediatR(Assembly.GetExecutingAssembly());
-        var sp = services.BuildServiceProvider();
+        // Prefer GitHub Actions env vars if available
+        var branch = Environment.GetEnvironmentVariable("GITHUB_REF_NAME");
+        var commit = Environment.GetEnvironmentVariable("GITHUB_SHA");
 
-        services.AddSingleton(typeof(Mediator.IPipelineBehavior<MediatorRequest, CommandResponse>), typeof(MediatorPipeline));
-        mediatR = sp.GetRequiredService<MediatR.IMediator>();
+        branch = string.IsNullOrWhiteSpace(branch) ? TryRunGit("rev-parse --abbrev-ref HEAD") : branch;
+        commit = string.IsNullOrWhiteSpace(commit) ? TryRunGit("rev-parse --short HEAD") : commit;
+
+        branch = Normalize(branch, "unknown-branch");
+        commit = Normalize(commit, "unknown-commit");
+
+        return (branch, commit);
+
+        static string Normalize(string? s, string fallback)
+        {
+            var v = (s ?? string.Empty).Trim();
+            // sanitize for folder name
+            foreach (var c in Path.GetInvalidFileNameChars())
+                v = v.Replace(c, '_');
+            return string.IsNullOrWhiteSpace(v) ? fallback : v;
+        }
     }
 
-    [Benchmark]
-    public async Task Space_ReqRes()
+    private static string TryRunGit(string arguments)
     {
-        _ = await space.Send<SpaceRequest, CommandResponse>(new SpaceRequest(2));
+        try
+        {
+            var psi = new ProcessStartInfo("git", arguments)
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var p = Process.Start(psi);
+            if (p == null) return string.Empty;
+            var output = p.StandardOutput.ReadToEnd();
+            p.WaitForExit(2000);
+            return output.Trim();
+        }
+        catch
+        {
+            return string.Empty;
+        }
     }
 
-    [Benchmark]
-    public async Task Space_Res()
+    private static void WriteMeta(string outputDir, IEnumerable<Summary> summaries)
     {
-        _ = await space.Send<CommandResponse>(new SpaceRequest(2));
-    }
+        var metaPath = Path.Combine(outputDir, "meta.md");
+        using var sw = new StreamWriter(metaPath);
 
-    [Benchmark]
-    public async Task SendMediator()
-    {
-        _ = await mediator.Send(new MediatorRequest(2));
-    }
-}
+        var utcNow = DateTime.UtcNow.ToString("u");
+        var (branch, commit) = GetGitInfo();
 
-public class TestHandler
-{
-    [Handle]
-    public ValueTask<CommandResponse> Handle(HandlerContext<SpaceRequest> request)
-    {
-        return ValueTask.FromResult(new CommandResponse(2));
-    }
+        sw.WriteLine($"# Benchmark Run");
+        sw.WriteLine();
+        sw.WriteLine($"- Date (UTC): {utcNow}");
+        sw.WriteLine($"- Branch: {branch}");
+        sw.WriteLine($"- Commit: {commit}");
+        sw.WriteLine();
 
-    [Pipeline]
-    public ValueTask<CommandResponse> Pipeline(PipelineContext<SpaceRequest> ctx, PipelineDelegate<SpaceRequest, CommandResponse> next)
-    {
-        return next(ctx);
-    }
-}
+        // Host/System info (portable; avoid BDN internals)
+        sw.WriteLine("## System Info");
+        sw.WriteLine($"- OS: {RuntimeInformation.OSDescription}");
+        sw.WriteLine($"- OS Architecture: {RuntimeInformation.OSArchitecture}");
+        sw.WriteLine($"- Process Architecture: {RuntimeInformation.ProcessArchitecture}");
+        sw.WriteLine($"- .NET Runtime: {RuntimeInformation.FrameworkDescription}");
+        sw.WriteLine($"- CPU Logical Cores: {Environment.ProcessorCount}");
+        sw.WriteLine();
 
-public record struct SpaceRequest(int Id) : Space.Abstraction.Contracts.IRequest<CommandResponse> { }
-public record struct MediatorRequest(int Id) : Mediator.IRequest<CommandResponse> { }
-public record struct MediatRRequest(int Id) : MediatR.IRequest<CommandResponse> { }
-public record struct CommandResponse(int Id);
+        sw.WriteLine("## Reports");
+        sw.WriteLine("The files below have been generated by benchmark tests:");
+        sw.WriteLine();
 
-public class CommandHandler : Mediator.IRequestHandler<MediatorRequest, CommandResponse>
-{
-    public ValueTask<CommandResponse> Handle(MediatorRequest request, CancellationToken cancellationToken) => ValueTask.FromResult(new CommandResponse(2));
-}
+        foreach (var s in summaries)
+        {
+            var md = $"{s.Title}-report-github.md";
+            var html = $"{s.Title}-report.html";
+            var csv = $"{s.Title}-report.csv";
 
-public class MediatorPipeline : Mediator.IPipelineBehavior<MediatorRequest, CommandResponse>
-{
-    public ValueTask<CommandResponse> Handle(MediatorRequest message, MessageHandlerDelegate<MediatorRequest, CommandResponse> next, CancellationToken cancellationToken)
-    {
-        return next(message, cancellationToken);
-    }
-}
+            sw.WriteLine($"- {md}");
+            sw.WriteLine($"- {html}");
+            sw.WriteLine($"- {csv}");
+        }
 
-public class CommandHandler2 : MediatR.IRequestHandler<MediatRRequest, CommandResponse>
-{
-    public Task<CommandResponse> Handle(MediatRRequest request, CancellationToken cancellationToken) => Task.FromResult(new CommandResponse(2));
-}
-
-public class MediatRPipeline : MediatR.IPipelineBehavior<MediatRRequest, CommandResponse>
-{
-    public Task<CommandResponse> Handle(MediatRRequest request, RequestHandlerDelegate<CommandResponse> next, CancellationToken cancellationToken)
-    {
-        return next();
+        sw.Flush();
     }
 }

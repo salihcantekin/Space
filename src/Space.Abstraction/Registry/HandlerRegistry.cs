@@ -18,6 +18,9 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
 
     public static ISpace Space { get; private set; }
 
+    // New: lifetime from SpaceRegistry to choose specialized entries
+    public ServiceLifetime HandlerLifetime { get; set; } = ServiceLifetime.Scoped;
+
     public void RegisterHandler<TRequest, TResponse>(
         HandlerInvoker<TRequest, TResponse> invoker,
         string name = "",
@@ -30,10 +33,21 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
         }
 
         var key = SpaceRegistry.GenerateKey<TRequest, TResponse>(name);
-        var entry = new SpaceRegistry.HandlerEntry<TRequest, TResponse>(invoker, lightInvoker, pipelines);
 
-        handlerMap[key] = entry;
-        handlerMapByType[(typeof(TRequest), typeof(TResponse))] = entry;
+        object entryObj;
+        // Choose specialized handler entry based on lifetime
+        if (HandlerLifetime == ServiceLifetime.Singleton)
+        {
+            entryObj = new SpaceRegistry.SingletonHandlerEntry<TRequest, TResponse>(invoker, lightInvoker, pipelines);
+        }
+        else
+        {
+            // Transient and Scoped use the generic/scoped-safe entry
+            entryObj = new SpaceRegistry.ScopedHandlerEntry<TRequest, TResponse>(invoker, lightInvoker, pipelines);
+        }
+
+        handlerMap[key] = entryObj;
+        handlerMapByType[(typeof(TRequest), typeof(TResponse))] = entryObj;
     }
 
     public void RegisterPipeline<TRequest, TResponse>(string handlerName, PipelineConfig pipelineConfig,

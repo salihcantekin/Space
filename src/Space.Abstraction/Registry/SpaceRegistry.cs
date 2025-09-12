@@ -11,6 +11,9 @@ namespace Space.Abstraction.Registry;
 
 public partial class SpaceRegistry
 {
+    private static int nextRegistryId;
+    internal int RegistryId { get; }
+
     private readonly IServiceProvider serviceProvider;
     private readonly HandlerRegistry handlerRegistry;
     private readonly NotificationRegistry notificationRegistry;
@@ -18,11 +21,22 @@ public partial class SpaceRegistry
     private readonly ModuleFactory moduleFactory;
 
     // Records the lifetime used when registering handlers (set by DI generator)
-    public ServiceLifetime HandlerLifetime { get; set; } = ServiceLifetime.Scoped;
+    private ServiceLifetime handlerLifetime = ServiceLifetime.Scoped;
+    public ServiceLifetime HandlerLifetime
+    {
+        get => handlerLifetime;
+        set
+        {
+            handlerLifetime = value;
+            // Propagate to handler registry for specialization decisions
+            handlerRegistry.HandlerLifetime = value;
+        }
+    }
 
     public SpaceRegistry(IServiceProvider serviceProvider)
     {
         this.serviceProvider = serviceProvider;
+        RegistryId = Interlocked.Increment(ref nextRegistryId);
 
         notificationDispatcher = serviceProvider.GetService<INotificationDispatcher>() ?? new SequentialNotificationDispatcher();
         notificationRegistry = new NotificationRegistry(notificationDispatcher);
@@ -47,7 +61,7 @@ public partial class SpaceRegistry
         handlerRegistry.RegisterHandler(handler, name, pipelines, lightInvoker);
     }
 
-    public void RegisterModule<TRequest, TResponse>(string moduleName, string handlerName = "")
+    public void RegisterModule<TRequest, TResponse>(string moduleName, string handlerName = "", string profileName = "")
     {
         var moduleType = serviceProvider.GetKeyedService<Type>(moduleName);
         var masterClass = serviceProvider.GetService(moduleType);
@@ -60,7 +74,7 @@ public partial class SpaceRegistry
         }
 
         handlerRegistry.RegisterPipeline<TRequest, TResponse>(handlerName, new PipelineConfig(order),
-            (ctx, next) => moduleFactory.Invoke(moduleName, ctx, next));
+            (ctx, next) => moduleFactory.Invoke<TRequest, TResponse>(moduleName, profileName, ctx, next));
     }
 
     // Lightweight handler entry access for fast path
@@ -106,6 +120,15 @@ public partial class SpaceRegistry
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ValueTask DispatchNotification<TRequest>(NotificationContext<TRequest> ctx, NotificationDispatchType dispatchType)
         => notificationRegistry.DispatchNotification(ctx, dispatchType);
+
+    // Fast notification dispatch wrappers (avoid reflection in Space)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal ValueTask FastDispatchNotification<TRequest>(NotificationContext<TRequest> ctx)
+        => notificationRegistry.FastDispatch(ctx);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal ValueTask FastDispatchNotification<TRequest>(NotificationContext<TRequest> ctx, NotificationDispatchType dispatchType)
+        => notificationRegistry.FastDispatch(ctx, dispatchType);
 
     public void CompleteRegistration()
     {

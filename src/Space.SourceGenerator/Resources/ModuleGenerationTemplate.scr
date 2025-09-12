@@ -18,7 +18,7 @@ namespace Space.DependencyInjection
 
             {{ for model in Models }}
 
-            services.AddKeyedSingleton(HandleIdentifier.From<{{ model.RequestType }},{{ model.ResponseType }}>("{{ model.ModuleName }}"), (sp, _) =>
+            services.AddKeyedSingleton(ModuleIdentifier.From(HandleIdentifier.From<{{ model.RequestType }},{{ model.ResponseType }}>("{{ model.ModuleName }}"), "{{ model.Profile }}"), (sp, _) =>
             {
                 var moduleConfig = new ModuleConfig("{{ model.ModuleName }}");
                 {{ for property in model.ModuleProperties }}

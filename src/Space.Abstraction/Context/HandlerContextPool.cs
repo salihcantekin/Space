@@ -1,10 +1,11 @@
 using Microsoft.Extensions.ObjectPool;
 using System;
+using System.Runtime.CompilerServices;
 using System.Threading;
 
 namespace Space.Abstraction.Context;
 
-public class HandlerContextPool<TRequest>
+public static class HandlerContextPool<TRequest>
 {
     private const int MaxRetained = 1024;
     private static readonly DefaultObjectPool<HandlerContext<TRequest>> pool =
@@ -13,6 +14,7 @@ public class HandlerContextPool<TRequest>
     [ThreadStatic]
     private static HandlerContext<TRequest> threadSlot; // single-thread fast path
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static HandlerContext<TRequest> Get(TRequest request, IServiceProvider serviceProvider, ISpace space, CancellationToken cancellationToken)
     {
         // Fast thread-local reuse (avoids pool hit & lock-free path inside pool)
@@ -32,6 +34,7 @@ public class HandlerContextPool<TRequest>
         return ctx;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Return(HandlerContext<TRequest> ctx)
     {
         // Try place back into thread slot, otherwise pool
@@ -46,7 +49,7 @@ public class HandlerContextPool<TRequest>
     }
 }
 
-public class HandlerContextPooledObjectPolicy<TRequest> : PooledObjectPolicy<HandlerContext<TRequest>>
+public sealed class HandlerContextPooledObjectPolicy<TRequest> : PooledObjectPolicy<HandlerContext<TRequest>>
 {
     public override HandlerContext<TRequest> Create() => new();
     public override bool Return(HandlerContext<TRequest> obj) => true; // always keep
