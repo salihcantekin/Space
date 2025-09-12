@@ -18,7 +18,7 @@ public class HandlerWithPipelineBench
 {
     private ISpace _space = default!;
     private Mediator.IMediator _mediator = default!;
-    private MediatR.IMediator _mediatR = default!;
+    private MediatR.IMediator mediatR = default!;
 
     private static readonly HP_SpaceRequest SpaceReq = new(7);
     private static readonly HP_MediatorRequest MediatorReq = new(7);
@@ -45,14 +45,14 @@ public class HandlerWithPipelineBench
         mrServices.AddMediatR(Assembly.GetExecutingAssembly());
         mrServices.AddSingleton(typeof(MediatR.IPipelineBehavior<HP_MediatRRequest, HP_Response>), typeof(HP_MediatRBehavior));
         var mrProvider = mrServices.BuildServiceProvider();
-        _mediatR = mrProvider.GetRequiredService<MediatR.IMediator>();
+        mediatR = mrProvider.GetRequiredService<MediatR.IMediator>();
 
         // Warm-up
         for (int i = 0; i < 10_000; i++)
         {
             _ = _space.Send<HP_SpaceRequest, HP_Response>(SpaceReq).GetAwaiter().GetResult();
             _ = _mediator.Send(MediatorReq).GetAwaiter().GetResult();
-            _ = _mediatR.Send(MediatRReq).GetAwaiter().GetResult();
+            //_ = _mediatR.Send(MediatRReq).GetAwaiter().GetResult();
         }
     }
 
@@ -61,12 +61,12 @@ public class HandlerWithPipelineBench
         => _space.Send<HP_SpaceRequest, HP_Response>(SpaceReq);
 
     [Benchmark]
-    public Task<HP_Response> Mediator_Send_WithBehavior()
-        => _mediator.Send(MediatorReq).AsTask();
+    public ValueTask<HP_Response> Mediator_Send_WithBehavior()
+        => _mediator.Send(MediatorReq);
 
-    [Benchmark]
+    //[Benchmark]
     public Task<HP_Response> MediatR_Send_WithBehavior()
-        => _mediatR.Send(MediatRReq);
+        => mediatR.Send(MediatRReq);
 }
 
 // Space: handler + pipeline

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Space.Abstraction.Modules;
 
-internal static class ModuleConfigMerge
+public static class ModuleConfigMerge
 {
     public static Dictionary<string, object> Merge(
         IReadOnlyDictionary<string, object> defaultProperties,

@@ -12,7 +12,7 @@ public interface IModuleGlobalOptionsAccessor<TModuleOptions>
     IReadOnlyDictionary<string, TModuleOptions> Profiles { get; }
 }
 
-internal sealed class ModuleGlobalOptionsAccessor<TModuleOptions> : IModuleGlobalOptionsAccessor<TModuleOptions>
+public sealed class ModuleGlobalOptionsAccessor<TModuleOptions> : IModuleGlobalOptionsAccessor<TModuleOptions>
     where TModuleOptions : BaseModuleOptions
 {
     public ModuleGlobalOptionsAccessor(IReadOnlyDictionary<string, TModuleOptions> profiles)
