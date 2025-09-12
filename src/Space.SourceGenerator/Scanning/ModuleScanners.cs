@@ -66,6 +66,7 @@ internal static class ModuleScanners
             ResponseType = methodSymbol.GetResponseGenericTypeName(fullName: true),
             ModuleName = attr.AttributeClass?.Name ?? "UnknownModule",
             ModuleProperties = attr.GetProperties(),
+            ModulePropertiesLiterals = attr.GetPropertiesAsLiterals(),
             ModuleProviderType = attr.GetAttributePropertyValue("ModuleProviderType")?.ToString() ?? "",
             Profile = profile
         };

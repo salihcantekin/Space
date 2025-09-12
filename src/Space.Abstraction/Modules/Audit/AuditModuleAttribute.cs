@@ -9,7 +9,6 @@ public class AuditModuleAttribute : Attribute, ISpaceModuleAttribute
 
     public string LogLevel { get; set; } = "Information";
 
-    // Optional: per-handler/provider override (must be registered in DI)
     public Type Provider { get; set; }
 
     public AuditModuleAttribute() { }
