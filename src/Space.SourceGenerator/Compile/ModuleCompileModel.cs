@@ -20,5 +20,7 @@ public class ModuleCompileModel
 
     public string ModuleProviderType { get; set; }
 
+    public string Profile { get; set; }
+
     public Dictionary<string, object> ModuleProperties { get; set; } = [];
 }
