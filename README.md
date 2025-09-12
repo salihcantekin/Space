@@ -45,6 +45,10 @@ var provider = services.BuildServiceProvider();
 var space = provider.GetRequiredService<ISpace>();
 
 public sealed record UserLoginRequest(string UserName);
+/*
+The response type can be defined using IRequest<T>.
+*/
+public sealed record UserLoginRequest(string UserName) : IRequest<UserLoginResponse>
 public sealed record UserLoginResponse(bool Success);
 
 public class UserHandlers
@@ -54,7 +58,22 @@ public class UserHandlers
         => ValueTask.FromResult(new UserLoginResponse(true));
 }
 
+ /*
+ The same functionality can be implemented using the IHandler<UserLoginRequest,  UserLoginResponse> interface.
+ The primary difference from the attribute-based approach is that the method name will be explicitly defined in the interface implementation.
+*/
+
+public class UserHandlers : IHandler<UserLoginRequest, UserLoginResponse>
+{
+    public ValueTask<UserLoginResponse> Handle  (UserLoginRequest request, CancellationToken  cancellationToken)
+        => ValueTask.FromResult(new UserLoginResponse   (true));
+}
+
 var response = await space.Send<UserLoginResponse>(new UserLoginRequest("demo"));
+/*
+A more efficient solution can be achieved in the Send method by utilizing both the request and response types.
+*/
+var response = await space.Send<UserLoginRequest, UserLoginResponse>(new UserLoginRequest("demo"))
 ```
 
 ### Named Handlers
@@ -74,9 +93,9 @@ public class LoggingPipeline
     [Pipeline(Order = 100)]
     public async ValueTask<TResponse> Log<TRequest, TResponse>(PipelineContext<TRequest> ctx)
     {
-        // pre
+        // pre-execution 
         var result = await ctx.Next(ctx);
-        // post
+        // post-execution
         return result;
     }
 }
