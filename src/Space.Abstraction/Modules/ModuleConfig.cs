@@ -28,10 +28,10 @@ public class ModuleConfig(string moduleName) : BaseConfig, IModuleConfig
 
         TypeConverter converter = TypeDescriptor.GetConverter(typeof(T));
 
-        if (!converter.CanConvertFrom(typeof(T)))
+        var valueType = value?.GetType() ?? typeof(object);
+        if (!converter.CanConvertFrom(valueType))
             return (T)value;
-        
-        return (T)converter.ConvertTo(value, typeof(T));
+        return (T)converter.ConvertFrom(value);
     }
 
     public void SetModuleProperties(Dictionary<string, object> properties)
