@@ -18,9 +18,9 @@
 		<CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
 	</PropertyGroup>-->
 
-	<!--<ItemGroup>
+	<ItemGroup>
 		<PackageReference Include="Space.Modules.InMemoryCache" Version="1.1.8" />
-	</ItemGroup>-->
+	</ItemGroup>
 	
 	
 	<!--<ItemGroup>
