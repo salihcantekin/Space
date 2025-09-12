@@ -1,15 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 
 namespace Space.Abstraction.Modules;
-
 
 public class ModuleConfig(string moduleName) : BaseConfig, IModuleConfig
 {
     public const string ModulePropertiesKey = "ModuleProperties";
 
     public string ModuleName { get; set; } = moduleName;
-
 
     public object GetModuleProperty(string key)
     {
@@ -24,13 +23,15 @@ public class ModuleConfig(string moduleName) : BaseConfig, IModuleConfig
     public T GetModuleProperty<T>(string key)
     {
         var value = GetModuleProperty(key);
-
         if (value == null)
-        {
             return default;
-        }
 
-        return (T)Convert.ChangeType(value, typeof(T));
+        TypeConverter converter = TypeDescriptor.GetConverter(typeof(T));
+
+        if (!converter.CanConvertFrom(typeof(T)))
+            return (T)value;
+        
+        return (T)converter.ConvertTo(value, typeof(T));
     }
 
     public void SetModuleProperties(Dictionary<string, object> properties)
@@ -49,8 +50,19 @@ public class ModuleConfig(string moduleName) : BaseConfig, IModuleConfig
         dict[key] = value;
     }
 
+    public IReadOnlyDictionary<string, object> GetAllModuleProperties()
+    {
+        if (Properties.TryGetValue(ModulePropertiesKey, out var dictObj) && dictObj is Dictionary<string, object> dict)
+            return dict;
+
+        return new Dictionary<string, object>();
+    }
+
     public override int GetHashCode()
     {
-        return $"{GetProperty("ClassFullName")}.{GetProperty("MethodName")}.{ModuleName}".GetHashCode();
+        var classFullName = GetProperty("ClassFullName")?.ToString() ?? string.Empty;
+        var methodName = GetProperty("MethodName")?.ToString() ?? string.Empty;
+
+        return ($"{classFullName}.{methodName}.{ModuleName}").GetHashCode();
     }
 }

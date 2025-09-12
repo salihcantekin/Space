@@ -46,7 +46,7 @@ public partial class SpaceRegistry
         handlerRegistry.RegisterHandler(handler, name, pipelines, lightInvoker);
     }
 
-    public void RegisterModule<TRequest, TResponse>(string moduleName, string handlerName = "")
+    public void RegisterModule<TRequest, TResponse>(string moduleName, string handlerName = "", string profileName = "")
     {
         var moduleType = serviceProvider.GetKeyedService<Type>(moduleName);
         var masterClass = serviceProvider.GetService(moduleType);
@@ -59,7 +59,7 @@ public partial class SpaceRegistry
         }
 
         handlerRegistry.RegisterPipeline<TRequest, TResponse>(handlerName, new PipelineConfig(order),
-            (ctx, next) => moduleFactory.Invoke(moduleName, ctx, next));
+            (ctx, next) => moduleFactory.Invoke(moduleName, profileName, ctx, next));
     }
 
     // Lightweight handler entry access for fast path

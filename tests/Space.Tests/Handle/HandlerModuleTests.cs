@@ -84,6 +84,11 @@ namespace Space.Tests.Handle
                 BeforeCalls = 0;
                 AfterCalls = 0;
             }
+
+            public void SetGlobalOptions<T>(T value)
+            {
+                
+            }
         }
 
         public sealed class TestHandlers

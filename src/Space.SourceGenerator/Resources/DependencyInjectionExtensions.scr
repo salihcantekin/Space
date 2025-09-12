@@ -107,9 +107,9 @@ namespace Space.DependencyInjection
                     });
                 }
 
-                void RegModule<TReq, TRes>(string handlerName, string moduleName)
+                void RegModule<TReq, TRes>(string handlerName, string moduleName, string profileName)
                 {
-                    registry.RegisterModule<TReq, TRes>(moduleName, handlerName);
+                    registry.RegisterModule<TReq, TRes>(moduleName, handlerName, profileName);
                 }
 
                 // Notifications
@@ -138,7 +138,7 @@ namespace Space.DependencyInjection
                     {{ end }}
 
                     {{ for m in h.ModuleCompileModels }}
-                    RegModule<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}", "{{ m.ModuleName }}");
+                    RegModule<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}", "{{ m.ModuleName }}", "{{m.Profile}}");
                     {{ end }}
                 {{ end }}
                 {{ end }}
