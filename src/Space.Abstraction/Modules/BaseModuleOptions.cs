@@ -1,7 +1,34 @@
-﻿using System;
-using Space.Abstraction.Exceptions;
+﻿using Space.Abstraction.Exceptions;
+using System;
+using System.Collections.Generic;
 
 namespace Space.Abstraction.Modules;
+
+public abstract class ProfileModuleOptions<T> : BaseModuleOptions where T : BaseModuleOptions, new()
+{
+    private readonly Dictionary<string, T> profiles = [];
+
+    public IReadOnlyDictionary<string, T> Profiles => profiles;
+
+    public void WithDefaultProfile(Action<T> configure)
+    {
+        WithProfile("Default", configure);
+    }
+
+    public void WithProfile(string profileName, Action<T> configure)
+    {
+        if (string.IsNullOrWhiteSpace(profileName))
+            throw new ArgumentException("Profile name cannot be null or whitespace.", nameof(profileName));
+
+        if (configure is null)
+            throw new ArgumentNullException(nameof(configure), "Configure action cannot be null.");
+
+        var profileOptions = new T();
+        configure(profileOptions);
+
+        profiles[profileName] = profileOptions;
+    }
+}
 
 public abstract class BaseModuleOptions : IModuleOptions
 {

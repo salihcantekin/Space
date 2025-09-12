@@ -13,9 +13,14 @@
 		<ProjectReference Include="..\..\src\Space.SourceGenerator\Space.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 	</ItemGroup>
 
+	<!--<PropertyGroup>
+		<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+		<CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
+	</PropertyGroup>-->
 
-
-	
+	<!--<ItemGroup>
+		<PackageReference Include="Space.Modules.InMemoryCache" Version="1.1.8" />
+	</ItemGroup>-->
 	
 	
 	<!--<ItemGroup>

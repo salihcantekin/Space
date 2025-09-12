@@ -20,7 +20,6 @@
 
 	<ItemGroup>
 		<None Include="icon.png" Pack="true" PackagePath="" />
-		<None Include="SpaceAbstraction.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

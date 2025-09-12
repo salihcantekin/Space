@@ -3,8 +3,10 @@ using Space.Abstraction;
 using Space.Abstraction.Attributes;
 using Space.Abstraction.Context;
 using Space.Abstraction.Contracts;
+using Space.Abstraction.Modules.Audit;
 using Space.DependencyInjection;
 using Space.TestConsole.Services;
+using Space.Abstraction.Modules.Retry;
 
 var services = new ServiceCollection();
 services.AddScoped<IDataService, DataService>();
@@ -18,6 +20,39 @@ services.AddSpace(opt =>
     opt.NotificationDispatchType = NotificationDispatchType.Parallel;
 });
 
+services.AddSpaceAudit(opt =>
+{
+    opt.WithModuleProvider(new NullAuditProvider());
+
+    opt.WithProfile("Default", o =>
+    {
+        o.LogLevel = "Warning";
+    });
+
+    opt.WithProfile("Dev", o =>
+    {
+        o.LogLevel = "Verbose";
+    });
+});
+
+services.AddSpaceRetry(opt =>
+{
+    opt.RetryCount = 3;
+    opt.DelayMilliseconds = 200;
+
+    opt.WithProfile("Default", o =>
+    {
+        o.RetryCount = 2;
+        o.DelayMilliseconds = 100;
+    });
+
+    opt.WithProfile("Dev", o =>
+    {
+        o.RetryCount = 3;
+        o.DelayMilliseconds = 1000;
+    });
+});
+
 var sp = services.BuildServiceProvider();
 ISpace space = sp.GetRequiredService<ISpace>();
 
@@ -27,15 +62,15 @@ var command = new UserCreateCommand() { Email = "salihcantekin@gmail.com", Name 
 //Console.WriteLine("Press ENTER to start");
 //Console.ReadLine();
 
-int counter = 100_000;
-//counter = 2;
+//int counter = 100_000;
+////counter = 2;
 
-for (int i = 0; i < counter; i++)
-{
-    _ = await space.Send<UserCreateResponse>(command);
-}
+//for (int i = 0; i < counter; i++)
+//{
+//    _ = await space.Send<UserCreateResponse>(command);
+//}
 
-//var res = await space.Send(command);
+var res = await space.Send<UserCreateResponse>(command);
 //res = await space.Send(command);
 
 
@@ -57,17 +92,30 @@ public class TestHandler
     //    return Nothing.ValueTask;
     //}
 
+    private int counter = 0;
 
     UserCreateResponse res = new("");
 
     [Handle(IsDefault = true)]
-    //[AuditModule]
+    //[CacheModule(Duration = 20)]
+    [AuditModule(Provider = typeof(NullAuditModuleProvider))]
+    //[RetryModule("Dev")]
+    //[RetryModule(Profile = "Default")]
+    //[AuditModule(Profile = "Default", LogLevel = "Debug")]
     public ValueTask<UserCreateResponse> Handle(HandlerContext<UserCreateCommand> ctx)
     {
         //var randomNumber = 1; // dataService.GetRandomNumber();
         //Log.Add($"   [TestHandler.UserCreateCommand] Processing Id: {ctx.Request}, Number: {randomNumber}");
 
         //var result = new UserCreateResponse($"{ctx.Request.Email}_{ctx.Request.Name}_{Random.Shared.Next(1, 100)}");
+
+        if (counter < 2)
+        {
+            counter++;
+            Log.Add($"   [TestHandler.UserCreateCommand] Throwing exception for {ctx.Request.Email}_{ctx.Request.Name}");
+            throw new Exception("Random exception");
+        }
+
         return ValueTask.FromResult(res);
     }
 
@@ -141,4 +189,17 @@ public record UserCreateCommand : IRequest<UserCreateResponse>
 {
     public string Name { get; init; } = string.Empty;
     public string Email { get; init; } = string.Empty;
+}
+
+
+public class NullAuditProvider : IAuditModuleProvider
+{
+    public ValueTask After<TRequest, TResponse>(TResponse response) where TRequest : notnull where TResponse : notnull
+    {
+        return ValueTask.CompletedTask;
+    }
+    public ValueTask Before<TRequest, TResponse>(TRequest request) where TRequest : notnull where TResponse : notnull
+    {
+        return ValueTask.CompletedTask;
+    }
 }
