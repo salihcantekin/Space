@@ -57,12 +57,12 @@ public class NotificationsParallelBench
     }
 
     [Benchmark]
-    public ValueTask Space_Publish_Parallel_Inline()
-        => spaceInline.Publish(Event, NotificationDispatchType.Parallel);
+    public async ValueTask Space_Publish_Parallel_Inline()
+        => await spaceInline.Publish(Event, NotificationDispatchType.Parallel);
 
     [Benchmark]
-    public ValueTask Space_Publish_Parallel_TaskWhenAll()
-        => spaceWhenAll.Publish(Event);
+    public async ValueTask Space_Publish_Parallel_TaskWhenAll()
+        => await spaceWhenAll.Publish(Event);
 }
 
 // Custom dispatcher that mimics the classic Task.WhenAll fan-out for comparison purposes.

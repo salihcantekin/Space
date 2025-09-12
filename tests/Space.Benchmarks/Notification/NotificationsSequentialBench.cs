@@ -58,16 +58,16 @@ public class NotificationsSequentialBench
     }
 
     [Benchmark]
-    public ValueTask Space_Publish()
-        => space.Publish(Event);
+    public async ValueTask Space_Publish()
+        => await space.Publish(Event);
 
     [Benchmark]
-    public ValueTask Mediator_Publish()
-        => mediatorPublisher.Publish(Event, CancellationToken.None);
+    public async ValueTask Mediator_Publish()
+        => await mediatorPublisher.Publish(Event, CancellationToken.None);
 
     [Benchmark]
-    public Task MediatR_Publish()
-        => mediatR.Publish(Event);
+    public async Task MediatR_Publish()
+        => await mediatR.Publish(Event);
 }
 
 // Space notifications (two subscribers)

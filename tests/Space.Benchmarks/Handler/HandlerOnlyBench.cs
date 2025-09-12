@@ -16,9 +16,9 @@ using Space.DependencyInjection;
 [MemoryDiagnoser]
 public class HandlerOnlyBench
 {
-    private ISpace _space = default!;
-    private Mediator.IMediator _mediator = default!;
-    private MediatR.IMediator _mediatR = default!;
+    private ISpace space = default!;
+    private Mediator.IMediator mediator = default!;
+    private MediatR.IMediator mediatR = default!;
 
     private static readonly HO_SpaceRequest SpaceReq = new(42);
     private static readonly HO_MediatorRequest MediatorReq = new(42);
@@ -31,40 +31,40 @@ public class HandlerOnlyBench
         var spServices = new ServiceCollection();
         spServices.AddSpace(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
         var spProvider = spServices.BuildServiceProvider();
-        _space = spProvider.GetRequiredService<ISpace>();
+        space = spProvider.GetRequiredService<ISpace>();
 
         // Mediator (martinothamar/Mediator)
         var medServices = new ServiceCollection();
         medServices.AddMediator(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
         var medProvider = medServices.BuildServiceProvider();
-        _mediator = medProvider.GetRequiredService<Mediator.IMediator>();
+        mediator = medProvider.GetRequiredService<Mediator.IMediator>();
 
         // MediatR (jbogard/MediatR)
         var mrServices = new ServiceCollection();
         mrServices.AddMediatR(Assembly.GetExecutingAssembly());
         var mrProvider = mrServices.BuildServiceProvider();
-        _mediatR = mrProvider.GetRequiredService<MediatR.IMediator>();
+        mediatR = mrProvider.GetRequiredService<MediatR.IMediator>();
 
         // Warm-up
         for (int i = 0; i < 10_000; i++)
         {
-            _ = _space.Send<HO_SpaceRequest, HO_Response>(SpaceReq).GetAwaiter().GetResult();
-            _ = _mediator.Send(MediatorReq).GetAwaiter().GetResult();
-            _ = _mediatR.Send(MediatRReq).GetAwaiter().GetResult();
+            _ = space.Send<HO_SpaceRequest, HO_Response>(SpaceReq).GetAwaiter().GetResult();
+            _ = mediator.Send(MediatorReq).GetAwaiter().GetResult();
+            _ = mediatR.Send(MediatRReq).GetAwaiter().GetResult();
         }
     }
 
     [Benchmark]
-    public ValueTask<HO_Response> Space_Send()
-        => _space.Send<HO_SpaceRequest, HO_Response>(SpaceReq);
+    public async ValueTask<HO_Response> Space_Send()
+        => await space.Send<HO_SpaceRequest, HO_Response>(SpaceReq);
 
     [Benchmark]
-    public Task<HO_Response> Mediator_Send()
-        => _mediator.Send(MediatorReq).AsTask();
+    public async ValueTask<HO_Response> Mediator_Send()
+        => await mediator.Send(MediatorReq);
 
     [Benchmark]
-    public Task<HO_Response> MediatR_Send()
-        => _mediatR.Send(MediatRReq);
+    public async Task<HO_Response> MediatR_Send()
+        => await mediatR.Send(MediatRReq);
 }
 
 // Space handler
