@@ -16,6 +16,8 @@ jobs:
   run-benchmarks:
     runs-on: windows-latest
     timeout-minutes: 60
+    env:
+      PUBLISH_DOCS_PAT: ${{ secrets.PUBLISH_DOCS_PAT }}
 
     steps:
       - name: Checkout
@@ -58,9 +60,9 @@ jobs:
 
       # Optional: Push to docs/benchmarks (requires repo write permission & PAT)
       - name: Publish to docs/benchmarks
-        if: ${{ secrets.PUBLISH_DOCS_PAT != '' }}
+        if: ${{ env.PUBLISH_DOCS_PAT != '' }}
         env:
-          GH_TOKEN: ${{ secrets.PUBLISH_DOCS_PAT }}
+          GH_TOKEN: ${{ env.PUBLISH_DOCS_PAT }}
         shell: pwsh
         run: |
           $dst = Join-Path $env:GITHUB_WORKSPACE "docs/benchmarks"
