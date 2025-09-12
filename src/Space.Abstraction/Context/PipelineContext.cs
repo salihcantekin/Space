@@ -64,16 +64,16 @@ public sealed class PipelineContext<TRequest> : BaseContext<TRequest>, IDisposab
                 { key, value }
             };
 
-            Key = null; 
+            Key = null;
             Value = null;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void Clear()
         {
-            Key = null; 
-            Value = null; 
-            Dict?.Clear(); 
+            Key = null;
+            Value = null;
+            Dict?.Clear();
             Dict = null;
         }
     }

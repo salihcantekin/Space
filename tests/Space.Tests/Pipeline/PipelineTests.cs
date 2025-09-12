@@ -132,7 +132,7 @@ public class PipelineTests
 
         handler.H1Func = ctx => ValueTask.FromResult(new Res(ctx.Request.Text + ":H1"));
         handler.H2Func = ctx => ValueTask.FromResult(new Res(ctx.Request.Text + ":H2"));
-        
+
         handler.P2Func = async (ctx, next) =>
         {
             var res = await next(ctx);

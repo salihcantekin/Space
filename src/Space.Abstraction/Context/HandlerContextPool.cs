@@ -30,7 +30,7 @@ public static class HandlerContextPool<TRequest>
         }
 
         ctx.Initialize(request, serviceProvider, space, cancellationToken);
-        
+
         return ctx;
     }
 

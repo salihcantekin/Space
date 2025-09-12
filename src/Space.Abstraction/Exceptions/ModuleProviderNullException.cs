@@ -3,13 +3,13 @@ using System;
 namespace Space.Abstraction.Exceptions;
 
 [Serializable]
-public sealed class ModuleProviderNullException: SpaceException
+public sealed class ModuleProviderNullException : SpaceException
 {
     public string ModuleName { get; }
 
-    public ModuleProviderNullException(): base("No module provider found")
+    public ModuleProviderNullException() : base("No module provider found")
     {
-        
+
     }
 
     public ModuleProviderNullException(string moduleName)
