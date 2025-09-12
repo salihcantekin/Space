@@ -1,0 +1,77 @@
+name: Benchmarks
+
+on:
+  workflow_dispatch:
+    inputs:
+      project:
+        description: 'Benchmark project path'
+        required: false
+        default: 'tests/Space.Benchmarks/Space.Benchmarks.csproj'
+      configuration:
+        description: 'Build configuration'
+        required: false
+        default: 'Release'
+
+jobs:
+  run-benchmarks:
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build ${{ github.event.inputs.project }} -c ${{ github.event.inputs.configuration }} --nologo --no-restore
+
+      - name: Run Benchmarks
+        env:
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          dotnet run -c ${{ github.event.inputs.configuration }} --project ${{ github.event.inputs.project }} -- --anyCategories "*"
+
+      - name: Locate Reports Directory
+        id: find_reports
+        shell: pwsh
+        run: |
+          $reports = Get-ChildItem -Path "$env:GITHUB_WORKSPACE/BenchmarkReports" -Directory | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $reports) { Write-Error "No BenchmarkReports folder found"; exit 1 }
+          echo "dir=$($reports.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-reports
+          path: ${{ steps.find_reports.outputs.dir }}
+
+      # Optional: Push to docs/benchmarks (requires repo write permission & PAT)
+      - name: Publish to docs/benchmarks
+        if: ${{ secrets.PUBLISH_DOCS_PAT != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.PUBLISH_DOCS_PAT }}
+        shell: pwsh
+        run: |
+          $dst = Join-Path $env:GITHUB_WORKSPACE "docs/benchmarks"
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+
+          $src = "${{ steps.find_reports.outputs.dir }}"
+          $folderName = Split-Path $src -Leaf
+          Copy-Item -Recurse -Force $src (Join-Path $dst $folderName)
+
+          git config user.email "actions@github.com"
+          git config user.name "github-actions"
+          git add docs/benchmarks
+          git commit -m "docs(benchmarks): add $folderName" || echo "No changes to commit"
+          git push origin HEAD:${{ github.ref_name }}
