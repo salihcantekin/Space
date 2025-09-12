@@ -72,8 +72,8 @@ jobs:
           $folderName = Split-Path $src -Leaf
           Copy-Item -Recurse -Force $src (Join-Path $dst $folderName)
 
-          git config user.email "actions@github.com"
-          git config user.name "github-actions"
+          git config user.email "salihcantekin@gmail.com"
+          git config user.name "salihcantekin"
           git add docs/benchmarks
           git commit -m "docs(benchmarks): add $folderName" || echo "No changes to commit"
           git push origin HEAD:${{ github.ref_name }}
