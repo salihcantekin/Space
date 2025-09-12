@@ -1,10 +1,8 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Exporters;
-using BenchmarkDotNet.Exporters.Csv;
 using BenchmarkDotNet.Loggers;
 using BenchmarkDotNet.Running;
 using BenchmarkDotNet.Reports;
@@ -20,7 +18,7 @@ public static class Program
         // Run all benchmarks and collect summaries
         var summaries = BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args, config);
 
-        // Write a simple meta.md with date/branch/commit and system info
+        // Write a simple meta.md with date and system info
         try
         {
             WriteMeta(outputDir, summaries);
@@ -34,73 +32,22 @@ public static class Program
 
     private static IConfig CreateConfig(out string outputDir)
     {
-        // Prefer CI workspace; fallback to current dir
-        var repoRoot = Environment.GetEnvironmentVariable("GITHUB_WORKSPACE")
-                        ?? Directory.GetCurrentDirectory();
+        // Project directory (e.g., tests/Space.Benchmarks)
+        var projectDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
+        var dateStamp = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-        var (branch, commit) = GetGitInfo();
-        var dateStamp = DateTime.UtcNow.ToString("yyyy-MM-dd_HH-mm-ss", CultureInfo.InvariantCulture);
-
-        // You can change this folder to docs/benchmarks if you want them committed into repo
-        outputDir = Path.Combine(repoRoot, "BenchmarkReports", $"{dateStamp}_{branch}_{commit}");
+        // Place results under Space.Benchmarks/BenchmarkResults/{date}
+        outputDir = Path.Combine(projectDir, "BenchmarkResults", dateStamp);
         Directory.CreateDirectory(outputDir);
 
-        var cfg = ManualConfig.Create(DefaultConfig.Instance)
+        // Start from minimum viable config to avoid DefaultConfig exporters (HTML/CSV)
+        var cfg = ManualConfig.CreateMinimumViable()
             .WithArtifactsPath(outputDir)
             .WithCultureInfo(CultureInfo.InvariantCulture)
             .AddLogger(ConsoleLogger.Default)
-            .AddExporter(MarkdownExporter.GitHub) // GitHub-flavored markdown per summary
-            .AddExporter(HtmlExporter.Default)    // HTML report per summary
-            .AddExporter(CsvExporter.Default);    // CSV per summary
+            .AddExporter(MarkdownExporter.GitHub); // Only markdown
 
         return cfg;
-    }
-
-    private static (string Branch, string Commit) GetGitInfo()
-    {
-        // Prefer GitHub Actions env vars if available
-        var branch = Environment.GetEnvironmentVariable("GITHUB_REF_NAME");
-        var commit = Environment.GetEnvironmentVariable("GITHUB_SHA");
-
-        branch = string.IsNullOrWhiteSpace(branch) ? TryRunGit("rev-parse --abbrev-ref HEAD") : branch;
-        commit = string.IsNullOrWhiteSpace(commit) ? TryRunGit("rev-parse --short HEAD") : commit;
-
-        branch = Normalize(branch, "unknown-branch");
-        commit = Normalize(commit, "unknown-commit");
-
-        return (branch, commit);
-
-        static string Normalize(string? s, string fallback)
-        {
-            var v = (s ?? string.Empty).Trim();
-            // sanitize for folder name
-            foreach (var c in Path.GetInvalidFileNameChars())
-                v = v.Replace(c, '_');
-            return string.IsNullOrWhiteSpace(v) ? fallback : v;
-        }
-    }
-
-    private static string TryRunGit(string arguments)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo("git", arguments)
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using var p = Process.Start(psi);
-            if (p == null) return string.Empty;
-            var output = p.StandardOutput.ReadToEnd();
-            p.WaitForExit(2000);
-            return output.Trim();
-        }
-        catch
-        {
-            return string.Empty;
-        }
     }
 
     private static void WriteMeta(string outputDir, IEnumerable<Summary> summaries)
@@ -108,17 +55,15 @@ public static class Program
         var metaPath = Path.Combine(outputDir, "meta.md");
         using var sw = new StreamWriter(metaPath);
 
-        var utcNow = DateTime.UtcNow.ToString("u");
-        var (branch, commit) = GetGitInfo();
+        var localNow = DateTime.Now.ToString("u");
 
-        sw.WriteLine($"# Benchmark Run");
+        sw.WriteLine("# Benchmark Run");
         sw.WriteLine();
-        sw.WriteLine($"- Date (UTC): {utcNow}");
-        sw.WriteLine($"- Branch: {branch}");
-        sw.WriteLine($"- Commit: {commit}");
+        sw.WriteLine($"- Date (Local UTC format): {localNow}");
+        sw.WriteLine($"- Output Directory: {outputDir}");
         sw.WriteLine();
 
-        // Host/System info (portable; avoid BDN internals)
+        // Host/System info (portable)
         sw.WriteLine("## System Info");
         sw.WriteLine($"- OS: {RuntimeInformation.OSDescription}");
         sw.WriteLine($"- OS Architecture: {RuntimeInformation.OSArchitecture}");
@@ -134,12 +79,8 @@ public static class Program
         foreach (var s in summaries)
         {
             var md = $"{s.Title}-report-github.md";
-            var html = $"{s.Title}-report.html";
-            var csv = $"{s.Title}-report.csv";
 
             sw.WriteLine($"- {md}");
-            sw.WriteLine($"- {html}");
-            sw.WriteLine($"- {csv}");
         }
 
         sw.Flush();
