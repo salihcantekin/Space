@@ -217,11 +217,6 @@ public static class ServiceCollectionExtensions
 
             var attribute = moduleType.GetCustomAttribute<SpaceModuleAttribute>();
 
-            if (attribute?.IsEnabled != true)
-            {
-                continue;
-            }
-
             var moduleAttributeName = attribute.ModuleAttributeType.Name;
             services.AddKeyedSingleton(serviceKey: moduleAttributeName, implementationInstance: moduleType);
             services.AddSingleton(moduleType);

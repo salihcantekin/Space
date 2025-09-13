@@ -100,25 +100,48 @@ namespace Space.DependencyInjection
 
                 void RegPipe<TReq, TRes, TPipe>(string handlerName, PipelineConfig cfg, Func<TPipe, PipelineContext<TReq>, PipelineDelegate<TReq, TRes>, ValueTask<TRes>> invoker)
                 {
-                    registry.RegisterPipeline<TReq, TRes>(handlerName, cfg, (ctx, next) =>
+                    if (isSingleton)
                     {
-                        var pipe = ctx.ServiceProvider.GetRequiredService<TPipe>();
-                        return invoker(pipe, ctx, next);
-                    });
+                        // Cache pipeline instance once for singleton lifetime to avoid per-call DI resolution
+                        var pipeInstance = sp.GetRequiredService<TPipe>();
+                        registry.RegisterPipeline<TReq, TRes>(handlerName, cfg, (ctx, next) => invoker(pipeInstance, ctx, next));
+                    }
+                    else
+                    {
+                        registry.RegisterPipeline<TReq, TRes>(handlerName, cfg, (ctx, next) =>
+                        {
+                            var pipe = ctx.ServiceProvider.GetRequiredService<TPipe>();
+                            return invoker(pipe, ctx, next);
+                        });
+                    }
                 }
 
-                void RegModule<TReq, TRes>(string handlerName, string moduleName)
+                void RegModule<TReq, TRes>(string handlerName, string moduleName, string profileName)
                 {
-                    registry.RegisterModule<TReq, TRes>(moduleName, handlerName);
+                    registry.RegisterModule<TReq, TRes>(moduleName, handlerName, profileName);
+                }
+
+                // New: notifications registrar using runtime singleton flag
+                void RegNotification<TReq, THandler>(Func<THandler, NotificationContext<TReq>, ValueTask> call)
+                {
+                    if (isSingleton)
+                    {
+                        var inst = sp.GetRequiredService<THandler>();
+                        registry.RegisterNotification<TReq>(ctx => call(inst, ctx));
+                    }
+                    else
+                    {
+                        registry.RegisterNotification<TReq>(ctx =>
+                        {
+                            var h = ctx.ServiceProvider.GetRequiredService<THandler>();
+                            return call(h, ctx);
+                        });
+                    }
                 }
 
                 // Notifications (unnamed)
                 {{ for n in Notifications }}
-                registry.RegisterNotification<{{ n.RequestParameterTypeName }}>((ctx) =>
-                {
-                    var h = ctx.ServiceProvider.GetRequiredService<{{ n.ClassFullName }}>();
-                    return h.{{ n.MethodName }}(ctx);
-                });
+                RegNotification<{{ n.RequestParameterTypeName }}, {{ n.ClassFullName }}>((inst, ctx) => inst.{{ n.MethodName }}(ctx));
                 {{ end }}
 
                 // Handlers / Pipelines / Modules
@@ -133,12 +156,12 @@ namespace Space.DependencyInjection
 
                     {{ for p in h.PipelineCompileModels }}
                     RegPipe<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}, {{ p.ClassFullName }}>("{{ h.HandlerName }}",
-                        new PipelineConfig(){ {{ for prop in p.Properties }} {{ prop.Key }} = {{ prop.Value }},{{ end }} },
+                        new PipelineConfig(){ Order = {{ p.Order }} },
                         (pipe, ctx, next) => {{ if p.IsValueTask }} pipe.{{ p.MethodName }}(ctx, next) {{ else }} VT(pipe.{{ p.MethodName }}(ctx, next)) {{ end }});
                     {{ end }}
 
                     {{ for m in h.ModuleCompileModels }}
-                    RegModule<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}", "{{ m.ModuleName }}");
+                    RegModule<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}", "{{ m.ModuleName }}", "{{m.Profile}}");
                     {{ end }}
                 {{ end }}
                 {{ end }}

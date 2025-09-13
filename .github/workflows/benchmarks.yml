@@ -62,7 +62,7 @@ jobs:
       - name: Publish to docs/benchmarks
         if: ${{ env.PUBLISH_DOCS_PAT != '' }}
         env:
-          GH_TOKEN: ${{ env.PUBLISH_DOCS_PAT }}
+          PUBLISH_DOCS_PAT: ${{ env.PUBLISH_DOCS_PAT }}
         shell: pwsh
         run: |
           $dst = Join-Path $env:GITHUB_WORKSPACE "docs/benchmarks"
@@ -76,4 +76,4 @@ jobs:
           git config user.name "salihcantekin"
           git add docs/benchmarks
           git commit -m "docs(benchmarks): add $folderName" || echo "No changes to commit"
-          git push origin HEAD:${{ github.ref_name }}
+

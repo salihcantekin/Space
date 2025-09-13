@@ -1,7 +1,10 @@
 ﻿using Microsoft.CodeAnalysis;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text;
+using System.Xml.Linq;
 
 namespace Space.SourceGenerator.Extensions;
 
@@ -83,11 +86,127 @@ public static class MethodSymbolExtensions
     {
         try
         {
-            var dict = new Dictionary<string, object>();
+            var dict = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            if (attr == null) 
+                return dict;
 
+            // Named arguments first
             foreach (var named in attr.NamedArguments)
             {
-                dict[named.Key] = named.Value.Value ?? string.Empty;
+                dict[named.Key] = ConvertTypedConstant(named.Value) ?? string.Empty;
+            }
+
+            // Positional (constructor) arguments
+            var ctor = attr.AttributeConstructor;
+            if (ctor != null)
+            {
+                var ctorArgs = attr.ConstructorArguments;
+                var properties = attr.AttributeClass?.GetMembers().OfType<IPropertySymbol>().ToList() ?? [];
+                var usedParamIndexes = new HashSet<int>();
+
+                // Raw parameter names
+                for (int i = 0; i < ctor.Parameters.Length && i < ctorArgs.Length; i++)
+                {
+                    var param = ctor.Parameters[i];
+                    var value = ConvertTypedConstant(ctorArgs[i]);
+                    dict[param.Name] = value ?? string.Empty;
+                }
+
+                // Type-based mapping to property names (unambiguous only)
+                foreach (var prop in properties)
+                {
+                    if (dict.ContainsKey(prop.Name))
+                        continue; // already set by named args
+
+                    var candidates = new List<int>();
+                    for (int i = 0; i < ctor.Parameters.Length && i < ctorArgs.Length; i++)
+                    {
+                        if (usedParamIndexes.Contains(i)) 
+                            continue;
+
+                        var p = ctor.Parameters[i];
+
+                        if (SymbolEqualityComparer.Default.Equals(p.Type, prop.Type) ||
+                            string.Equals(p.Type?.Name, prop.Type?.Name, StringComparison.Ordinal))
+                        {
+                            candidates.Add(i);
+                        }
+                    }
+
+                    if (candidates.Count == 1)
+                    {
+                        var idx = candidates[0];
+                        dict[prop.Name] = ConvertTypedConstant(ctorArgs[idx]) ?? string.Empty;
+                        usedParamIndexes.Add(idx);
+                    }
+                }
+            }
+
+            return dict;
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    // New: returns C# code literals/expressions for attribute values (for codegen)
+    public static Dictionary<string, string> GetPropertiesAsLiterals(this AttributeData attr)
+    {
+        try
+        {
+            var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (attr == null)
+                return dict;
+
+            // Named arguments first
+            foreach (var named in attr.NamedArguments)
+            {
+                dict[named.Key] = FormatTypedConstantAsLiteral(named.Value);
+            }
+
+            // Positional (constructor) arguments
+            var ctor = attr.AttributeConstructor;
+            if (ctor != null)
+            {
+                var ctorArgs = attr.ConstructorArguments;
+                var properties = attr.AttributeClass?.GetMembers().OfType<IPropertySymbol>().ToList() ?? [];
+                var usedParamIndexes = new HashSet<int>();
+
+                // Raw parameter names
+                for (int i = 0; i < ctor.Parameters.Length && i < ctorArgs.Length; i++)
+                {
+                    var param = ctor.Parameters[i];
+                    dict[param.Name] = FormatTypedConstantAsLiteral(ctorArgs[i]);
+                }
+
+                // Type-based mapping to property names (unambiguous only)
+                foreach (var prop in properties)
+                {
+                    if (dict.ContainsKey(prop.Name))
+                        continue; // already set by named args
+
+                    var candidates = new List<int>();
+                    for (int i = 0; i < ctor.Parameters.Length && i < ctorArgs.Length; i++)
+                    {
+                        if (usedParamIndexes.Contains(i))
+                            continue;
+
+                        var p = ctor.Parameters[i];
+                        if (SymbolEqualityComparer.Default.Equals(p.Type, prop.Type) ||
+                            string.Equals(p.Type?.Name, prop.Type?.Name, StringComparison.Ordinal))
+                        {
+                            candidates.Add(i);
+                        }
+                    }
+
+                    if (candidates.Count == 1)
+                    {
+                        var idx = candidates[0];
+                        dict[prop.Name] = FormatTypedConstantAsLiteral(ctorArgs[idx]);
+                        usedParamIndexes.Add(idx);
+                    }
+                }
             }
 
             return dict;
@@ -99,7 +218,8 @@ public static class MethodSymbolExtensions
     }
 
     /// <summary>
-    /// Takes AttributeData and a property name, and returns the property's value (supports named, ctor, and static/readonly property).
+    /// Returns value of an attribute argument by logical property name.
+    /// Order: named args -> positional ctor arg selected by type match (unambiguous).
     /// </summary>
     public static object GetAttributePropertyValue(this AttributeData attribute, string propertyName)
     {
@@ -108,44 +228,176 @@ public static class MethodSymbolExtensions
             return null;
         }
 
-        // 1. Named arguments
-        var named = attribute.NamedArguments.FirstOrDefault(a => StringComparer.OrdinalIgnoreCase.Equals(a.Key, propertyName));
-
-        if (named.Value.Value != null)
+        // 1) Named arguments
+        foreach (var named in attribute.NamedArguments)
         {
-            return named.Value.Value;
+            if (string.Equals(named.Key, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                return ConvertTypedConstant(named.Value);
+            }
         }
 
-        // 2. Constructor arguments
-        var property = attribute.AttributeClass?.GetMembers()
+        // 2) Positional by matching property type (only if unambiguous)
+        var propSymbol = attribute.AttributeClass?.GetMembers()
             .OfType<IPropertySymbol>()
-            .FirstOrDefault(p => StringComparer.OrdinalIgnoreCase.Equals(p.Name, propertyName));
+            .FirstOrDefault(p => string.Equals(p.Name, propertyName, StringComparison.OrdinalIgnoreCase));
 
-        if (property != null)
+        var ctor = attribute.AttributeConstructor;
+        var ctorArgs = attribute.ConstructorArguments;
+
+        if (propSymbol != null && ctor != null)
         {
-            foreach (var ctor in attribute.AttributeClass.Constructors)
+            var candidateIndexes = new List<int>();
+            for (int i = 0; i < ctor.Parameters.Length && i < ctorArgs.Length; i++)
             {
-                for (int i = 0; i < ctor.Parameters.Length && i < attribute.ConstructorArguments.Length; i++)
+                var p = ctor.Parameters[i];
+                if (SymbolEqualityComparer.Default.Equals(p.Type, propSymbol.Type) ||
+                    string.Equals(p.Type?.Name, propSymbol.Type?.Name, StringComparison.Ordinal))
                 {
-                    if (StringComparer.OrdinalIgnoreCase.Equals(ctor.Parameters[i].Name, propertyName))
-                    {
-                        var ctorArg = attribute.ConstructorArguments[i];
-
-                        if (ctorArg.Value != null)
-                        {
-                            return ctorArg.Value;
-                        }
-                    }
+                    candidateIndexes.Add(i);
                 }
             }
 
-            // 3. Static property
-            if (property.IsStatic && property.GetMethod != null)
+            if (candidateIndexes.Count == 1)
             {
-                return property.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                return ConvertTypedConstant(ctorArgs[candidateIndexes[0]]);
             }
         }
 
         return null;
+    }
+
+    private static object ConvertTypedConstant(TypedConstant tc)
+    {
+        if (tc.IsNull)
+            return null;
+
+        if (tc.Kind == TypedConstantKind.Array)
+        {
+            return tc.Values.Select(ConvertTypedConstant).ToArray();
+        }
+
+        // Enum constants -> return fully-qualified member name if resolvable, else raw value
+        if (tc.Type is INamedTypeSymbol tcType && tcType.TypeKind == TypeKind.Enum)
+        {
+            var val = tc.Value;
+            if (val != null)
+            {
+                var field = tcType.GetMembers()
+                                   .OfType<IFieldSymbol>()
+                                   .FirstOrDefault(f => f.HasConstantValue && Equals(f.ConstantValue, val));
+
+                if (field != null)
+                {
+                    return tcType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + field.Name;
+                }
+            }
+
+            return val; // fallback underlying numeric
+        }
+
+        // Type symbols
+        if (tc.Value is ITypeSymbol ts)
+        {
+            return ts.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        }
+
+        return tc.Value;
+    }
+
+    private static string FormatTypedConstantAsLiteral(TypedConstant tc)
+    {
+        if (tc.IsNull)
+            return "null";
+
+        if (tc.Kind == TypedConstantKind.Array)
+        {
+            var items = tc.Values.Select(FormatTypedConstantAsLiteral).ToArray();
+            return "new object[] { " + string.Join(", ", items) + " }";
+        }
+
+        if (tc.Type is INamedTypeSymbol tcType && tcType.TypeKind == TypeKind.Enum)
+        {
+            var val = tc.Value;
+            if (val != null)
+            {
+                var field = tcType.GetMembers()
+                                   .OfType<IFieldSymbol>()
+                                   .FirstOrDefault(f => f.HasConstantValue && Equals(f.ConstantValue, val));
+                if (field != null)
+                {
+                    return tcType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + field.Name;
+                }
+            }
+            // Fallback: numeric literal
+            return Convert.ToString(val, CultureInfo.InvariantCulture);
+        }
+
+        if (tc.Value is ITypeSymbol ts)
+        {
+            var name = ts.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            return "typeof(" + name + ")";
+        }
+
+        // Primitive/string
+        var v = tc.Value;
+        if (v is string s)
+        {
+            return QuoteString(s);
+        }
+        if (v is char ch)
+        {
+            return "'" + EscapeChar(ch) + "'";
+        }
+        if (v is bool b)
+        {
+            return b ? "true" : "false";
+        }
+        if (v is IFormattable form)
+        {
+            return form.ToString(null, CultureInfo.InvariantCulture);
+        }
+
+        // Fallback to ToString quoted
+        return QuoteString(v?.ToString() ?? string.Empty);
+    }
+
+    private static string QuoteString(string s)
+    {
+        var sb = new StringBuilder();
+        sb.Append('"');
+        foreach (var c in s)
+        {
+            switch (c)
+            {
+                case '\\': sb.Append("\\\\"); break;
+                case '"': sb.Append("\\\""); break;
+                case '\n': sb.Append("\\n"); break;
+                case '\r': sb.Append("\\r"); break;
+                case '\t': sb.Append("\\t"); break;
+                case '\0': sb.Append("\\0"); break;
+                case '\a': sb.Append("\\a"); break;
+                case '\b': sb.Append("\\b"); break;
+                case '\f': sb.Append("\\f"); break;
+                case '\v': sb.Append("\\v"); break;
+                default: sb.Append(c); break;
+            }
+        }
+        sb.Append('"');
+        return sb.ToString();
+    }
+
+    private static string EscapeChar(char c)
+    {
+        switch (c)
+        {
+            case '\\': return "\\\\";
+            case '\'': return "\\'";
+            case '\n': return "\\n";
+            case '\r': return "\\r";
+            case '\t': return "\\t";
+            case '\0': return "\\0";
+            default: return c.ToString();
+        }
     }
 }

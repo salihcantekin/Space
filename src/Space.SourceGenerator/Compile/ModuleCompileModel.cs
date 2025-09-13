@@ -20,5 +20,10 @@ public class ModuleCompileModel
 
     public string ModuleProviderType { get; set; }
 
+    public string Profile { get; set; }
+
     public Dictionary<string, object> ModuleProperties { get; set; } = [];
+
+    // New: literals for template emission (values are valid C# expressions)
+    public Dictionary<string, string> ModulePropertiesLiterals { get; set; } = [];
 }

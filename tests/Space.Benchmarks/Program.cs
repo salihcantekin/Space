@@ -1,141 +1,88 @@
-﻿// See https://aka.ms/new-console-template for more information
-using BenchmarkDotNet.Attributes;
+using System.Globalization;
+using System.IO;
+using System.Runtime.InteropServices;
+using BenchmarkDotNet.Configs;
+using BenchmarkDotNet.Exporters;
+using BenchmarkDotNet.Loggers;
 using BenchmarkDotNet.Running;
-using Mediator;
-using MediatR;
-using Microsoft.Extensions.DependencyInjection;
-using Space.Abstraction;
-using Space.Abstraction.Attributes;
-using Space.Abstraction.Context;
-using Space.DependencyInjection;
-using System.Reflection;
+using BenchmarkDotNet.Reports;
 
-BenchmarkRunner.Run<Bench>();
-return;
+namespace Space.Benchmarks;
 
-var services = new ServiceCollection();
-services.AddSpace(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
-
-var sp = services.BuildServiceProvider();
-var space = sp.GetRequiredService<ISpace>();
-var res = await space.Send<CommandResponse>(new SpaceRequest(2));
-
-Console.WriteLine("Res: " + res);
-
-[SimpleJob]
-[MemoryDiagnoser]
-public class Bench
+public static class Program
 {
-    private ISpace space;
-    private Mediator.IMediator mediator;
-    private MediatR.IMediator mediatR;
-
-    private static readonly MediatorRequest StaticRequest = new(2);
-    private static readonly SpaceRequest StaticSpaceRequest = new(2);
-
-    [Params(1)]
-    public int N;
-
-    [GlobalSetup(Targets = [nameof(Space_Res), nameof(Space_ReqRes)])]
-    public void SpaceSetup()
+    public static void Main(string[] args)
     {
-        var services = new ServiceCollection();
-        services.AddSpace(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
-        var sp = services.BuildServiceProvider();
-        space = sp.GetRequiredService<ISpace>();
+        var config = CreateConfig(out var outputDir);
 
-        // Pool warmup: create & return contexts a number of times so steady-state ölçülsün
-        for (int i = 0; i < 10_000; i++)
+        // Run all benchmarks and collect summaries
+        var summaries = BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args, config);
+
+        // Write a simple meta.md with date and system info
+        try
         {
-            _ = space.Send<SpaceRequest, CommandResponse>(StaticSpaceRequest).GetAwaiter().GetResult();
+            WriteMeta(outputDir, summaries);
+            Console.WriteLine($"Benchmark reports written to: {outputDir}");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Failed to write meta report: {ex}");
         }
     }
 
-    [GlobalSetup(Targets = [nameof(SendMediator)])]
-    public void MediatorSetup()
+    private static IConfig CreateConfig(out string outputDir)
     {
-        var services = new ServiceCollection();
-        services.AddMediator(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
-        var sp = services.BuildServiceProvider();
-        mediator = sp.GetRequiredService<Mediator.IMediator>();
-        services.AddSingleton(typeof(MediatR.IPipelineBehavior<MediatRRequest, CommandResponse>), typeof(MediatRPipeline));
+        // Project directory (e.g., tests/Space.Benchmarks)
+        var projectDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
+        var dateStamp = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-        for (int i = 0; i < 10_000; i++)
-            _ = mediator.Send(new MediatorRequest(2)).GetAwaiter().GetResult();
+        // Place results under Space.Benchmarks/BenchmarkResults/{date}
+        outputDir = Path.Combine(projectDir, "BenchmarkResults", dateStamp);
+        Directory.CreateDirectory(outputDir);
+
+        // Start from minimum viable config to avoid DefaultConfig exporters (HTML/CSV)
+        var cfg = ManualConfig.CreateMinimumViable()
+            .WithArtifactsPath(outputDir)
+            .WithCultureInfo(CultureInfo.InvariantCulture)
+            .AddLogger(ConsoleLogger.Default)
+            .AddExporter(MarkdownExporter.GitHub); // Only markdown
+
+        return cfg;
     }
 
-    [GlobalSetup]
-    public void MediatRSetup()
+    private static void WriteMeta(string outputDir, IEnumerable<Summary> summaries)
     {
-        var services = new ServiceCollection();
-        services.AddMediatR(Assembly.GetExecutingAssembly());
-        var sp = services.BuildServiceProvider();
+        var metaPath = Path.Combine(outputDir, "meta.md");
+        using var sw = new StreamWriter(metaPath);
 
-        services.AddSingleton(typeof(Mediator.IPipelineBehavior<MediatorRequest, CommandResponse>), typeof(MediatorPipeline));
-        mediatR = sp.GetRequiredService<MediatR.IMediator>();
-    }
+        var localNow = DateTime.Now.ToString("u");
 
-    [Benchmark]
-    public async Task Space_ReqRes()
-    {
-        _ = await space.Send<SpaceRequest, CommandResponse>(new SpaceRequest(2));
-    }
+        sw.WriteLine("# Benchmark Run");
+        sw.WriteLine();
+        sw.WriteLine($"- Date (Local UTC format): {localNow}");
+        sw.WriteLine($"- Output Directory: {outputDir}");
+        sw.WriteLine();
 
-    [Benchmark]
-    public async Task Space_Res()
-    {
-        _ = await space.Send<CommandResponse>(new SpaceRequest(2));
-    }
+        // Host/System info (portable)
+        sw.WriteLine("## System Info");
+        sw.WriteLine($"- OS: {RuntimeInformation.OSDescription}");
+        sw.WriteLine($"- OS Architecture: {RuntimeInformation.OSArchitecture}");
+        sw.WriteLine($"- Process Architecture: {RuntimeInformation.ProcessArchitecture}");
+        sw.WriteLine($"- .NET Runtime: {RuntimeInformation.FrameworkDescription}");
+        sw.WriteLine($"- CPU Logical Cores: {Environment.ProcessorCount}");
+        sw.WriteLine();
 
-    [Benchmark]
-    public async Task SendMediator()
-    {
-        _ = await mediator.Send(new MediatorRequest(2));
-    }
-}
+        sw.WriteLine("## Reports");
+        sw.WriteLine("The files below have been generated by benchmark tests:");
+        sw.WriteLine();
 
-public class TestHandler
-{
-    [Handle]
-    public ValueTask<CommandResponse> Handle(HandlerContext<SpaceRequest> request)
-    {
-        return ValueTask.FromResult(new CommandResponse(2));
-    }
+        foreach (var s in summaries)
+        {
+            var md = $"{s.Title}-report-github.md";
 
-    [Pipeline]
-    public ValueTask<CommandResponse> Pipeline(PipelineContext<SpaceRequest> ctx, PipelineDelegate<SpaceRequest, CommandResponse> next)
-    {
-        return next(ctx);
-    }
-}
+            sw.WriteLine($"- {md}");
+        }
 
-public record struct SpaceRequest(int Id) : Space.Abstraction.Contracts.IRequest<CommandResponse> { }
-public record struct MediatorRequest(int Id) : Mediator.IRequest<CommandResponse> { }
-public record struct MediatRRequest(int Id) : MediatR.IRequest<CommandResponse> { }
-public record struct CommandResponse(int Id);
-
-public class CommandHandler : Mediator.IRequestHandler<MediatorRequest, CommandResponse>
-{
-    public ValueTask<CommandResponse> Handle(MediatorRequest request, CancellationToken cancellationToken) => ValueTask.FromResult(new CommandResponse(2));
-}
-
-public class MediatorPipeline : Mediator.IPipelineBehavior<MediatorRequest, CommandResponse>
-{
-    public ValueTask<CommandResponse> Handle(MediatorRequest message, MessageHandlerDelegate<MediatorRequest, CommandResponse> next, CancellationToken cancellationToken)
-    {
-        return next(message, cancellationToken);
-    }
-}
-
-public class CommandHandler2 : MediatR.IRequestHandler<MediatRRequest, CommandResponse>
-{
-    public Task<CommandResponse> Handle(MediatRRequest request, CancellationToken cancellationToken) => Task.FromResult(new CommandResponse(2));
-}
-
-public class MediatRPipeline : MediatR.IPipelineBehavior<MediatRRequest, CommandResponse>
-{
-    public Task<CommandResponse> Handle(MediatRRequest request, RequestHandlerDelegate<CommandResponse> next, CancellationToken cancellationToken)
-    {
-        return next();
+        sw.Flush();
     }
 }

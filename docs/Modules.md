@@ -9,17 +9,9 @@ Modules in Space are system-level pipelines that perform predefined operations, 
 ## Custom Modules
 You can implement your own modules by following the interface and configuration standards. See the `Space.Modules.InMemoryCache` for reference.
 
-## Example: Redis Cache
+## Example: InMemory Cache
 ```csharp
-services.AddSpaceCache(opt =>
-{
-    opt.WithCacheModule(sp => new RedisModuleProvider());
-});
-
-public sealed class RedisModuleProvider : ICacheModuleProvider
-{
-    // Implementation details...
-}
+services.AddSpaceInMemoryCache();
 ```
 
 ## Notes

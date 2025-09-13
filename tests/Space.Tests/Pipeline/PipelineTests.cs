@@ -3,6 +3,7 @@ using Space.Abstraction;
 using Space.Abstraction.Attributes;
 using Space.Abstraction.Context;
 using Space.DependencyInjection;
+using System.Reflection;
 
 namespace Space.Tests.Pipeline;
 
@@ -64,6 +65,34 @@ public class PipelineTests
         var sp = services.BuildServiceProvider();
         Space = sp.GetRequiredService<ISpace>();
         return sp.GetRequiredService<PipelineHandler>();
+    }
+
+    [TestCleanup]
+    public void TestCleanup()
+    {
+        // Clear Space.EntryCache<Req,Res> to avoid leaking cached entries between tests
+        ClearSpaceEntryCache<Req, Res>();
+    }
+
+    private static void ClearSpaceEntryCache<TReq, TRes>()
+    {
+        var spaceType = typeof(Space.DependencyInjection.Space);
+        var generic = spaceType.GetNestedType("EntryCache`2", BindingFlags.NonPublic | BindingFlags.Static);
+        if (generic == null) return;
+        var closed = generic.MakeGenericType(typeof(TReq), typeof(TRes));
+
+        foreach (var f in closed.GetFields(BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Public))
+        {
+            if (f.FieldType.IsValueType)
+            {
+                if (f.FieldType == typeof(bool)) f.SetValue(null, false);
+                else if (f.FieldType.IsPrimitive) f.SetValue(null, Activator.CreateInstance(f.FieldType));
+            }
+            else
+            {
+                f.SetValue(null, null);
+            }
+        }
     }
 
     [TestMethod]

@@ -12,17 +12,13 @@ namespace Space.DependencyInjection
     {
         public static IServiceCollection AddSpaceModules(this IServiceCollection services)
         {
-            {{ for name in UniqueModuleAttributeNames }}
-            
-            {{ end }}
+           {{ for model in Models }}
 
-            {{ for model in Models }}
-
-            services.AddKeyedSingleton(HandleIdentifier.From<{{ model.RequestType }},{{ model.ResponseType }}>("{{ model.ModuleName }}"), (sp, _) =>
+            services.AddKeyedSingleton(ModuleIdentifier.From(HandleIdentifier.From<{{ model.RequestType }},{{ model.ResponseType }}>("{{ model.ModuleName }}"), "{{ model.Profile }}"), (sp, _) =>
             {
                 var moduleConfig = new ModuleConfig("{{ model.ModuleName }}");
-                {{ for property in model.ModuleProperties }}
-            moduleConfig.SetModuleProperty("{{ property.Key }}", "{{ property.Value }}");
+                {{ for property in model.ModulePropertiesLiterals }}
+                moduleConfig.SetModuleProperty("{{ property.Key }}", {{ property.Value }});
                 {{ end }}
                 
                 return moduleConfig;

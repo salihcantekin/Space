@@ -35,15 +35,21 @@ public sealed class HandlerContext<TRequest> : BaseContext<TRequest>, IDisposabl
 }
 
 
-public struct HandlerContextStruct(object request, IServiceProvider serviceProvider, ISpace Space, CancellationToken cancellationToken)
+public readonly struct HandlerContextStruct
 {
-    public object Request { get; set; } = request;
-    public CancellationToken CancellationToken { get; set; } = cancellationToken;
-    public IServiceProvider ServiceProvider { get; set; } = serviceProvider;
-    public ISpace Space { get; set; } = Space;
+    public HandlerContextStruct(object request, IServiceProvider serviceProvider, ISpace space, CancellationToken cancellationToken)
+    {
+        Request = request;
+        ServiceProvider = serviceProvider;
+        Space = space;
+        CancellationToken = cancellationToken;
+    }
+
+    public object Request { get; }
+    public CancellationToken CancellationToken { get; }
+    public IServiceProvider ServiceProvider { get; }
+    public ISpace Space { get; }
 
     public static HandlerContextStruct Create(IServiceProvider sp, object request, ISpace space, CancellationToken ct = default)
-    {
-        return new HandlerContextStruct(request, sp, space, ct);
-    }
+        => new HandlerContextStruct(request, sp, space, ct);
 }
