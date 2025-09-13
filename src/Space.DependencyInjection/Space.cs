@@ -36,7 +36,7 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ValueTask<TResponse> Send<TRequest, TResponse>(TRequest request, string name = null, CancellationToken ct = default)
-        where TRequest : notnull
+        where TRequest : notnull, IRequest<TResponse>
         where TResponse : notnull
     {
         if (ct.IsCancellationRequested)
@@ -172,18 +172,67 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         }
     }
 
-    // Constrained overloads to avoid boxing for IRequest<TResponse>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ValueTask<TResponse> Send<TRequest, TResponse>(in TRequest request, CancellationToken ct = default)
-        where TRequest : struct, IRequest<TResponse>
+    public ValueTask<TResponse> Send<TResponse>(IRequest<TResponse> request, string name = null, CancellationToken ct = default)
         where TResponse : notnull
-            => Send<TRequest, TResponse>(request, null, ct);
+    {
+        if (ct.IsCancellationRequested)
+            return ValueTask.FromCanceled<TResponse>(ct);
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ValueTask<TResponse> Send<TRequest, TResponse>(TRequest request, CancellationToken ct = default)
-        where TRequest : class, IRequest<TResponse>
-        where TResponse : notnull
-            => Send<TRequest, TResponse>(request, null, ct);
+        if (IsFastPath(spaceRegistry.HandlerLifetime))
+        {
+            // Try runtime-type lookup without expression/MakeGenericMethod
+            if (spaceRegistry.TryGetHandlerEntryByRuntimeType(request.GetType(), typeof(TResponse), name, out var entryObj)
+                && entryObj is SpaceRegistry.IObjectHandlerEntry entry)
+            {
+                var hctx = HandlerContextStruct.Create(rootProvider, request, this, ct);
+                var vto = entry.InvokeObject(hctx);
+
+                if (vto.IsCompletedSuccessfully)
+                    return new ValueTask<TResponse>((TResponse)vto.Result!);
+                
+                return AwaitFast1(vto);
+
+                static async ValueTask<TResponse> AwaitFast1(ValueTask<object> vt)
+                    => (TResponse)await vt.ConfigureAwait(false);
+            }
+
+            // Fallback: object dispatch through registry (still no expression compile)
+            var vtoFallback = spaceRegistry.DispatchHandler(request, name, typeof(TResponse), rootProvider, ct);
+
+            if (vtoFallback.IsCompletedSuccessfully)
+                return new ValueTask<TResponse>((TResponse)vtoFallback.Result!);
+
+            return AwaitFast2(vtoFallback);
+
+            static async ValueTask<TResponse> AwaitFast2(ValueTask<object> vt)
+                => (TResponse)await vt.ConfigureAwait(false);
+        }
+
+        // Scoped path
+        using var scope = scopeFactory.CreateScope();
+        if (ct.IsCancellationRequested)
+            return ValueTask.FromCanceled<TResponse>(ct);
+
+        var vts = spaceRegistry.DispatchHandler(request, name, typeof(TResponse), scope.ServiceProvider, ct);
+
+        if (vts.IsCompletedSuccessfully)
+            return new ValueTask<TResponse>((TResponse)vts.Result!);
+
+        return AwaitScoped(vts, scope);
+
+        static async ValueTask<TResponse> AwaitScoped(ValueTask<object> vt, IServiceScope scope)
+        {
+            try 
+            {
+                return (TResponse)await vt.ConfigureAwait(false); 
+            }
+            finally 
+            {
+                scope.Dispose(); 
+            }
+        }
+    }
 
     #endregion
 
@@ -311,4 +360,5 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         }
     }
 
+    
 }

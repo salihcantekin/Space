@@ -11,7 +11,7 @@ namespace Space.Tests.Pipeline;
 public class PipelineTests
 {
     private ISpace Space;
-    public record Req(string Text);
+    public record Req(string Text) : Space.Abstraction.Contracts.IRequest<Res>;
     public record Res(string Text);
 
     public class PipelineHandler
