@@ -10,6 +10,8 @@ public interface IPipelineHandler<TRequest, TResponse>
 }
 
 public interface IHandler<TRequest, TResponse>
+    where TRequest : notnull, IRequest<TResponse>
+    where TResponse : notnull
 {
     ValueTask<TResponse> Handle(HandlerContext<TRequest> ctx);
 }

@@ -4,6 +4,9 @@ Pipelines in Space act as middleware for handler execution. They are methods mar
 
 ## Example
 ```csharp
+public record UserLoginRequest(string UserName) : IRequest<UserLoginResponse>;
+public record UserLoginResponse(bool Success);
+
 public partial class UserHandlers
 {
     // Runs first (lower Order executes earlier in the chain)
@@ -29,6 +32,7 @@ public partial class UserHandlers
 You can implement pipeline interfaces for type safety and build-time validation:
 ```csharp
 public class MyPipeline : IPipelineHandler<MyRequest, MyResponse>
+    where MyRequest : IRequest<MyResponse>
 {
     public ValueTask<MyResponse> HandlePipeline(PipelineContext<MyRequest> ctx, PipelineDelegate<MyRequest, MyResponse> next)
         => next(ctx);
@@ -42,6 +46,9 @@ public class MyPipeline : IPipelineHandler<MyRequest, MyResponse>
 - Items are cleared automatically between requests.
 
 ```csharp
+public record MyReq(string Text) : IRequest<MyRes>;
+public record MyRes(string Text);
+
 public class SampleHandlers
 {
     // Global pipelines (no handle name) for the same request/response
@@ -55,7 +62,7 @@ public class SampleHandlers
         var res = await next(ctx);
         // Read again later if needed
         var tid = (string)ctx.GetItem("trace-id");
-        return res; // or: return res with { Text = $"{res.Text}:P1:{tid}" };
+        return res with { Text = $"{res.Text}:P1={tid}" };
     }
 
     // Order = 2 executes after P1 (closer to the handler)
@@ -63,9 +70,9 @@ public class SampleHandlers
     public async ValueTask<MyRes> P2(PipelineContext<MyReq> ctx, PipelineDelegate<MyReq, MyRes> next)
     {
         // Access value set by P1
-        var tid = (string)ctx.GetItem("trace-id"); // not null
+        var tid = (string)ctx.GetItem("trace-id");
         var res = await next(ctx);
-        return res; // or: return res with { Text = $"{res.Text}:P2:{tid}" };
+        return res with { Text = $"{res.Text}:P2={tid}" };
     }
 }
 ```

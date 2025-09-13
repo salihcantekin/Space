@@ -47,6 +47,10 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
         }
 
         handlerMap[key] = entryObj;
+
+        // Map (TRequest, TResponse) to the last registered entry (unnamed or named).
+        // This supports unnamed Send resolving to the last handler, and with OrderedHandlers
+        // default-marked handlers are registered last.
         handlerMapByType[(typeof(TRequest), typeof(TResponse))] = entryObj;
     }
 
@@ -118,6 +122,13 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
 
         if (string.IsNullOrEmpty(name))
         {
+            // Prefer explicit unnamed mapping if present
+            if (readOnlyHandlerMap != null && readOnlyHandlerMap.TryGetValue((requestType, string.Empty, responseType), out var unnamed))
+            {
+                entryObj = unnamed;
+                return true;
+            }
+
             if (readOnlyHandlerMapByType != null && readOnlyHandlerMapByType.TryGetValue((requestType, responseType), out var direct))
             {
                 entryObj = direct;
@@ -157,6 +168,20 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
         if (readOnlyHandlerMapByType.TryGetValue((typeof(TRequest), typeof(TResponse)), out var typeHandlerObj) && typeHandlerObj is SpaceRegistry.HandlerEntry<TRequest, TResponse> typeEntry)
         {
             return typeEntry.Invoke(ctx);
+        }
+
+        // Fallback: enumerate to find the last registered handler for (TRequest,TResponse)
+        SpaceRegistry.HandlerEntry<TRequest, TResponse> lastMatch = null;
+        foreach (var kv in readOnlyHandlerMap)
+        {
+            if (kv.Key.Item1 == typeof(TRequest) && kv.Key.Item3 == typeof(TResponse) && kv.Value is SpaceRegistry.HandlerEntry<TRequest, TResponse> e)
+            {
+                lastMatch = e; // preserve insertion order, this becomes the last registered
+            }
+        }
+        if (lastMatch != null)
+        {
+            return lastMatch.Invoke(ctx);
         }
 
         throw new InvalidOperationException($"Handler not found for type {typeof(TRequest)} -> {typeof(TResponse)} and name '{name}'");
@@ -202,6 +227,13 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
             // Prefer disambiguated lookup when responseType provided
             if (responseType != null)
             {
+                // Prefer explicit unnamed mapping if present
+                if (readOnlyHandlerMap != null && readOnlyHandlerMap.TryGetValue((type, string.Empty, responseType), out var explicitUnnamed) && explicitUnnamed is SpaceRegistry.IObjectHandlerEntry explicitUnnamedEntry)
+                {
+                    var ctx = HandlerContextStruct.Create(execProvider, request, space, ct);
+                    return explicitUnnamedEntry.InvokeObject(ctx);
+                }
+
                 if (readOnlyHandlerMapByType.TryGetValue((type, responseType), out var handlerObjRt) && handlerObjRt is SpaceRegistry.IObjectHandlerEntry objectHandlerRt)
                 {
                     var ctx = HandlerContextStruct.Create(execProvider, request, space, ct);

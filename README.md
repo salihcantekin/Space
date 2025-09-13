@@ -184,6 +184,24 @@ MIT.
 ## Disclaimer
 APIs may evolve while early preview features stabilize. Track releases for changes.
 
+---
+# Space
+
+Space is a high-performance, source-generator powered mediator/messaging framework for .NET.
+
+- Docs: see the `docs/` folder
+- Contribution guide for modules: see [docs/Contribution.md](docs/Contribution.md)
+
+## Quick links
+- Handlers: docs/Handlers.md
+- Pipelines: docs/Pipelines.md
+- Notifications: docs/Notifications.md
+- Known Issues: docs/KnownIssues.md
+- Developer Recommendations: docs/DeveloperRecommendations.md
+
+## Build
+See `.github/copilot-instructions.md` for environment and common commands.
+
 
 
 

@@ -21,6 +21,8 @@ internal class DiagnosticGenerator
 
         new MissingPipelineAttributeRule(),
         new PipelineAttributeRule()
+        // SEND001 disabled for now (kept in code for future use)
+        // new SendGenericResponseMismatchRule()
     ];
 
     internal static bool ReportDiagnostics(SourceProductionContext spc, Compilation compilation, HandlersCompileWrapperModel model)

@@ -33,7 +33,7 @@ public class HandleTests
     }
 
     // Additional types for default handler selection tests
-    public record DefaultReq(int Id);
+    public record DefaultReq(int Id) : IRequest<DefaultRes>;
     public record DefaultRes(string Tag);
 
     public class DefaultSelectionHandlers
@@ -74,24 +74,6 @@ public class HandleTests
         handler.HandleIntFunc = null;
         handler.HandleWithNameFunc = null;
         handler.HandleForPipelineFunc = null;
-    }
-
-    [TestMethod]
-    public async Task Send_WithRequestResponse_ShouldReturnExpected_Func()
-    {
-        // Arrange
-        handler.HandleIntFunc = ctx =>
-        {
-            Assert.IsNotNull(ctx);
-            Assert.AreEqual(5, ctx.Request);
-            return ValueTask.FromResult(10);
-        };
-
-        // Act
-        var res = await Space.Send<int, int>(5);
-
-        // Assert
-        Assert.AreEqual(10, res);
     }
 
     [TestMethod]
