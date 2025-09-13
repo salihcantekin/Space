@@ -16,8 +16,6 @@ jobs:
   run-benchmarks:
     runs-on: windows-latest
     timeout-minutes: 60
-    permissions:
-      contents: write
     env:
       PUBLISH_DOCS_PAT: ${{ secrets.PUBLISH_DOCS_PAT }}
 
@@ -58,7 +56,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-reports
-        
           path: ${{ steps.find_reports.outputs.dir }}
 
       # Optional: Push to docs/benchmarks (requires repo write permission & PAT)
@@ -75,11 +72,8 @@ jobs:
           $folderName = Split-Path $src -Leaf
           Copy-Item -Recurse -Force $src (Join-Path $dst $folderName)
 
-          git config user.email "actions@github.com"
-          git config user.name "github-actions"
+          git config user.email "salihcantekin@gmail.com"
+          git config user.name "salihcantekin"
           git add docs/benchmarks
           git commit -m "docs(benchmarks): add $folderName" || echo "No changes to commit"
 
-          # Set remote with PAT and push
-          git remote set-url origin "https://x-access-token:$env:PUBLISH_DOCS_PAT@github.com/${{ github.repository }}.git"
-          git push origin HEAD:${{ github.ref_name }}
