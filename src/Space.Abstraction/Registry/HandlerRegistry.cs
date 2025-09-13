@@ -18,6 +18,9 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
 
     public static ISpace Space { get; private set; }
 
+    // New: lifetime from SpaceRegistry to choose specialized entries
+    public ServiceLifetime HandlerLifetime { get; set; } = ServiceLifetime.Scoped;
+
     public void RegisterHandler<TRequest, TResponse>(
         HandlerInvoker<TRequest, TResponse> invoker,
         string name = "",
@@ -30,10 +33,25 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
         }
 
         var key = SpaceRegistry.GenerateKey<TRequest, TResponse>(name);
-        var entry = new SpaceRegistry.HandlerEntry<TRequest, TResponse>(invoker, lightInvoker, pipelines);
 
-        handlerMap[key] = entry;
-        handlerMapByType[(typeof(TRequest), typeof(TResponse))] = entry;
+        object entryObj;
+        // Choose specialized handler entry based on lifetime
+        if (HandlerLifetime == ServiceLifetime.Singleton)
+        {
+            entryObj = new SpaceRegistry.SingletonHandlerEntry<TRequest, TResponse>(invoker, lightInvoker, pipelines);
+        }
+        else
+        {
+            // Transient and Scoped use the generic/scoped-safe entry
+            entryObj = new SpaceRegistry.ScopedHandlerEntry<TRequest, TResponse>(invoker, lightInvoker, pipelines);
+        }
+
+        handlerMap[key] = entryObj;
+
+        // Map (TRequest, TResponse) to the last registered entry (unnamed or named).
+        // This supports unnamed Send resolving to the last handler, and with OrderedHandlers
+        // default-marked handlers are registered last.
+        handlerMapByType[(typeof(TRequest), typeof(TResponse))] = entryObj;
     }
 
     public void RegisterPipeline<TRequest, TResponse>(string handlerName, PipelineConfig pipelineConfig,
@@ -104,6 +122,13 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
 
         if (string.IsNullOrEmpty(name))
         {
+            // Prefer explicit unnamed mapping if present
+            if (readOnlyHandlerMap != null && readOnlyHandlerMap.TryGetValue((requestType, string.Empty, responseType), out var unnamed))
+            {
+                entryObj = unnamed;
+                return true;
+            }
+
             if (readOnlyHandlerMapByType != null && readOnlyHandlerMapByType.TryGetValue((requestType, responseType), out var direct))
             {
                 entryObj = direct;
@@ -145,6 +170,20 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
             return typeEntry.Invoke(ctx);
         }
 
+        // Fallback: enumerate to find the last registered handler for (TRequest,TResponse)
+        SpaceRegistry.HandlerEntry<TRequest, TResponse> lastMatch = null;
+        foreach (var kv in readOnlyHandlerMap)
+        {
+            if (kv.Key.Item1 == typeof(TRequest) && kv.Key.Item3 == typeof(TResponse) && kv.Value is SpaceRegistry.HandlerEntry<TRequest, TResponse> e)
+            {
+                lastMatch = e; // preserve insertion order, this becomes the last registered
+            }
+        }
+        if (lastMatch != null)
+        {
+            return lastMatch.Invoke(ctx);
+        }
+
         throw new InvalidOperationException($"Handler not found for type {typeof(TRequest)} -> {typeof(TResponse)} and name '{name}'");
     }
 
@@ -163,7 +202,7 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
         {
             throw new InvalidOperationException($"Request type mismatch. Expected {typeof(TRequest)}, got {request?.GetType()}");
         }
-        
+
         var ctx = HandlerContext<TRequest>.Create(executionProvider, typed, ct);
 
         return DispatchHandler<TRequest, TResponse>(executionProvider, ctx, name);
@@ -188,6 +227,13 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
             // Prefer disambiguated lookup when responseType provided
             if (responseType != null)
             {
+                // Prefer explicit unnamed mapping if present
+                if (readOnlyHandlerMap != null && readOnlyHandlerMap.TryGetValue((type, string.Empty, responseType), out var explicitUnnamed) && explicitUnnamed is SpaceRegistry.IObjectHandlerEntry explicitUnnamedEntry)
+                {
+                    var ctx = HandlerContextStruct.Create(execProvider, request, space, ct);
+                    return explicitUnnamedEntry.InvokeObject(ctx);
+                }
+
                 if (readOnlyHandlerMapByType.TryGetValue((type, responseType), out var handlerObjRt) && handlerObjRt is SpaceRegistry.IObjectHandlerEntry objectHandlerRt)
                 {
                     var ctx = HandlerContextStruct.Create(execProvider, request, space, ct);

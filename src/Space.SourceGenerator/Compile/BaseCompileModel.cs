@@ -3,7 +3,7 @@
 public record BaseCompileModel
 {
     private string classFullName;
-    public string ClassFullName 
+    public string ClassFullName
     {
         get => classFullName;
         set => classFullName = value;

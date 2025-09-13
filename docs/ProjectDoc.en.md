@@ -149,7 +149,7 @@ Register it instead of the default in-memory provider.
 ## 8. Custom Module Implementation Guidelines
 When adding a new module:
 1. Create an attribute implementing `ISpaceModuleAttribute` (e.g. `[AuditModule]`).
-2. Create a `SpaceModule` subclass decorated with `[SpaceModule(ModuleAttributeType = typeof(AuditModuleAttribute), IsEnabled = true)]`.
+2. Create a `SpaceModule` subclass decorated with `[SpaceModule(ModuleAttributeType = typeof(AuditModuleAttribute))]`.
 3. Provide a config model implementing `IModuleConfig`.
 4. Provide a provider implementing `IModuleProvider` (and custom interfaces if needed, e.g. `IAuditModuleProvider`).
 5. Offer an extension method to register provider/config (e.g. `AddSpaceAudit`).

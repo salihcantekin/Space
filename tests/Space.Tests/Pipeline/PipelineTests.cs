@@ -3,6 +3,7 @@ using Space.Abstraction;
 using Space.Abstraction.Attributes;
 using Space.Abstraction.Context;
 using Space.DependencyInjection;
+using System.Reflection;
 
 namespace Space.Tests.Pipeline;
 
@@ -10,7 +11,7 @@ namespace Space.Tests.Pipeline;
 public class PipelineTests
 {
     private ISpace Space;
-    public record Req(string Text);
+    public record Req(string Text) : Space.Abstraction.Contracts.IRequest<Res>;
     public record Res(string Text);
 
     public class PipelineHandler
@@ -66,6 +67,34 @@ public class PipelineTests
         return sp.GetRequiredService<PipelineHandler>();
     }
 
+    [TestCleanup]
+    public void TestCleanup()
+    {
+        // Clear Space.EntryCache<Req,Res> to avoid leaking cached entries between tests
+        ClearSpaceEntryCache<Req, Res>();
+    }
+
+    private static void ClearSpaceEntryCache<TReq, TRes>()
+    {
+        var spaceType = typeof(Space.DependencyInjection.Space);
+        var generic = spaceType.GetNestedType("EntryCache`2", BindingFlags.NonPublic | BindingFlags.Static);
+        if (generic == null) return;
+        var closed = generic.MakeGenericType(typeof(TReq), typeof(TRes));
+
+        foreach (var f in closed.GetFields(BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Public))
+        {
+            if (f.FieldType.IsValueType)
+            {
+                if (f.FieldType == typeof(bool)) f.SetValue(null, false);
+                else if (f.FieldType.IsPrimitive) f.SetValue(null, Activator.CreateInstance(f.FieldType));
+            }
+            else
+            {
+                f.SetValue(null, null);
+            }
+        }
+    }
+
     [TestMethod]
     public async Task Pipeline_Order_Is_Applied_And_Next_Called_Func()
     {
@@ -103,7 +132,7 @@ public class PipelineTests
 
         handler.H1Func = ctx => ValueTask.FromResult(new Res(ctx.Request.Text + ":H1"));
         handler.H2Func = ctx => ValueTask.FromResult(new Res(ctx.Request.Text + ":H2"));
-        
+
         handler.P2Func = async (ctx, next) =>
         {
             var res = await next(ctx);

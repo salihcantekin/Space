@@ -16,9 +16,9 @@ using Space.DependencyInjection;
 [MemoryDiagnoser]
 public class HandlerWithPipelineBench
 {
-    private ISpace _space = default!;
-    private Mediator.IMediator _mediator = default!;
-    private MediatR.IMediator _mediatR = default!;
+    private ISpace space = default!;
+    private Mediator.IMediator mediator = default!;
+    private MediatR.IMediator mediatR = default!;
 
     private static readonly HP_SpaceRequest SpaceReq = new(7);
     private static readonly HP_MediatorRequest MediatorReq = new(7);
@@ -31,42 +31,42 @@ public class HandlerWithPipelineBench
         var spServices = new ServiceCollection();
         spServices.AddSpace(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
         var spProvider = spServices.BuildServiceProvider();
-        _space = spProvider.GetRequiredService<ISpace>();
+        space = spProvider.GetRequiredService<ISpace>();
 
         // Mediator + explicit behavior registration for concrete request/response
         var medServices = new ServiceCollection();
         medServices.AddMediator(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
         medServices.AddSingleton(typeof(Mediator.IPipelineBehavior<HP_MediatorRequest, HP_Response>), typeof(HP_MediatorBehavior));
         var medProvider = medServices.BuildServiceProvider();
-        _mediator = medProvider.GetRequiredService<Mediator.IMediator>();
+        mediator = medProvider.GetRequiredService<Mediator.IMediator>();
 
         // MediatR + explicit behavior registration for concrete request/response
         var mrServices = new ServiceCollection();
         mrServices.AddMediatR(Assembly.GetExecutingAssembly());
         mrServices.AddSingleton(typeof(MediatR.IPipelineBehavior<HP_MediatRRequest, HP_Response>), typeof(HP_MediatRBehavior));
         var mrProvider = mrServices.BuildServiceProvider();
-        _mediatR = mrProvider.GetRequiredService<MediatR.IMediator>();
+        mediatR = mrProvider.GetRequiredService<MediatR.IMediator>();
 
         // Warm-up
         for (int i = 0; i < 10_000; i++)
         {
-            _ = _space.Send<HP_SpaceRequest, HP_Response>(SpaceReq).GetAwaiter().GetResult();
-            _ = _mediator.Send(MediatorReq).GetAwaiter().GetResult();
-            _ = _mediatR.Send(MediatRReq).GetAwaiter().GetResult();
+            _ = space.Send<HP_SpaceRequest, HP_Response>(SpaceReq).GetAwaiter().GetResult();
+            _ = mediator.Send(MediatorReq).GetAwaiter().GetResult();
+            _ = mediatR.Send(MediatRReq).GetAwaiter().GetResult();
         }
     }
 
     [Benchmark]
-    public ValueTask<HP_Response> Space_Send_WithPipeline()
-        => _space.Send<HP_SpaceRequest, HP_Response>(SpaceReq);
+    public async ValueTask<HP_Response> Space_Send_WithPipeline()
+        => await space.Send<HP_SpaceRequest, HP_Response>(SpaceReq);
 
     [Benchmark]
-    public Task<HP_Response> Mediator_Send_WithBehavior()
-        => _mediator.Send(MediatorReq).AsTask();
+    public async ValueTask<HP_Response> Mediator_Send_WithBehavior()
+        => await mediator.Send(MediatorReq);
 
     [Benchmark]
-    public Task<HP_Response> MediatR_Send_WithBehavior()
-        => _mediatR.Send(MediatRReq);
+    public async Task<HP_Response> MediatR_Send_WithBehavior()
+        => await mediatR.Send(MediatRReq);
 }
 
 // Space: handler + pipeline

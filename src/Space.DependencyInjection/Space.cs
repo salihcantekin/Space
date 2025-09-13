@@ -3,7 +3,7 @@ using Space.Abstraction.Extensions;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using Space.Abstraction; // for NotificationDispatchType
+using Space.Abstraction;
 
 namespace Space.DependencyInjection;
 
@@ -13,7 +13,9 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
 
     private static class EntryCache<TReq, TRes>
     {
-        internal static SpaceRegistry.HandlerEntry<TReq, TRes> Entry;
+        internal static SpaceRegistry.HandlerEntry<TReq, TRes> Entry;          // unnamed fast path
+        internal static SpaceRegistry.HandlerEntry<TReq, TRes> NamedEntry;     // last named fast path
+        internal static string NamedKey;                                       // last name used
         internal static bool Initialized;
     }
 
@@ -34,7 +36,7 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ValueTask<TResponse> Send<TRequest, TResponse>(TRequest request, string name = null, CancellationToken ct = default)
-        where TRequest : notnull
+        where TRequest : notnull, IRequest<TResponse>
         where TResponse : notnull
     {
         if (ct.IsCancellationRequested)
@@ -42,32 +44,58 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
 
         if (IsFastPath(spaceRegistry.HandlerLifetime))
         {
-            var cached = EntryCache<TRequest, TResponse>.Entry;
-            if (cached != null)
+            // Unnamed fast path: use Entry cache
+            if (string.IsNullOrEmpty(name))
             {
-                if (cached.HasLightInvoker)
-                    return cached.InvokeLight(rootProvider, this, request, ct);
+                var cached = EntryCache<TRequest, TResponse>.Entry;
+                if (cached != null)
+                {
+                    if (cached.HasLightInvoker)
+                        return cached.InvokeLight(rootProvider, this, request, ct);
 
-                var ctxCached = HandlerContext<TRequest>.Create(rootProvider, request, ct);
+                    var ctxCached = HandlerContext<TRequest>.Create(rootProvider, request, ct);
+                    return cached.Invoke(ctxCached).AwaitAndReturnHandlerInvoke(ctxCached);
+                }
 
-                return spaceRegistry.DispatchHandler<TRequest, TResponse>(rootProvider, ctxCached, name).AwaitAndReturnHandlerInvoke(ctxCached);
+                if (!EntryCache<TRequest, TResponse>.Initialized && spaceRegistry.TryGetHandlerEntry<TRequest, TResponse>(null, out var first))
+                {
+                    EntryCache<TRequest, TResponse>.Entry = first;
+                    EntryCache<TRequest, TResponse>.Initialized = true;
+
+                    if (first.HasLightInvoker)
+                        return first.InvokeLight(rootProvider, this, request, ct);
+
+                    var ctxFirst = HandlerContext<TRequest>.Create(rootProvider, request, ct);
+                    return first.Invoke(ctxFirst).AwaitAndReturnHandlerInvoke(ctxFirst);
+                }
+            }
+            else
+            {
+                // Named fast path: remember last used named entry for this TReq/TRes
+                if (EntryCache<TRequest, TResponse>.NamedKey == name && EntryCache<TRequest, TResponse>.NamedEntry is { } namedCached)
+                {
+                    if (namedCached.HasLightInvoker)
+                        return namedCached.InvokeLight(rootProvider, this, request, ct);
+
+                    var ctxNamed = HandlerContext<TRequest>.Create(rootProvider, request, ct);
+                    return namedCached.Invoke(ctxNamed).AwaitAndReturnHandlerInvoke(ctxNamed);
+                }
+
+                if (spaceRegistry.TryGetHandlerEntry<TRequest, TResponse>(name, out var named))
+                {
+                    EntryCache<TRequest, TResponse>.NamedKey = name;
+                    EntryCache<TRequest, TResponse>.NamedEntry = named;
+
+                    if (named.HasLightInvoker)
+                        return named.InvokeLight(rootProvider, this, request, ct);
+
+                    var ctxNamed2 = HandlerContext<TRequest>.Create(rootProvider, request, ct);
+                    return named.Invoke(ctxNamed2).AwaitAndReturnHandlerInvoke(ctxNamed2);
+                }
             }
 
-            if (!EntryCache<TRequest, TResponse>.Initialized && spaceRegistry.TryGetHandlerEntry<TRequest, TResponse>(name, out var first))
-            {
-                EntryCache<TRequest, TResponse>.Entry = first;
-                EntryCache<TRequest, TResponse>.Initialized = true;
-
-                if (first.HasLightInvoker)
-                    return first.InvokeLight(rootProvider, this, request, ct);
-
-                var ctxFirst = HandlerContext<TRequest>.Create(rootProvider, request, ct);
-
-                return spaceRegistry.DispatchHandler<TRequest, TResponse>(rootProvider, ctxFirst, name).AwaitAndReturnHandlerInvoke(ctxFirst);
-            }
-
+            // Fallback: legacy registry path
             var ctx = HandlerContext<TRequest>.Create(rootProvider, request, ct);
-
             return spaceRegistry.DispatchHandler<TRequest, TResponse>(rootProvider, ctx, name).AwaitAndReturnHandlerInvoke(ctx);
         }
 
@@ -78,25 +106,37 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         if (ct.IsCancellationRequested)
         {
             scope.Dispose();
-
             return ValueTask.FromCanceled<TResponse>(ct);
         }
 
-        if (spaceRegistry.TryGetHandlerEntry<TRequest, TResponse>(name, out var scopedEntry) && scopedEntry.IsPipelineFree)
+        if (spaceRegistry.TryGetHandlerEntry<TRequest, TResponse>(name, out var scopedEntry))
         {
-            var lite = scopedEntry.InvokeLight(sp, this, request, ct);
-
-            if (lite.IsCompletedSuccessfully)
+            if (scopedEntry.IsPipelineFree)
             {
-                scope.Dispose();
-                return lite;
+                var lite = scopedEntry.InvokeLight(sp, this, request, ct);
+
+                if (lite.IsCompletedSuccessfully)
+                {
+                    scope.Dispose();
+                    return lite;
+                }
+
+                return AwaitLite(lite, scope);
             }
 
-            return AwaitLite(lite, scope);
+            var scopedCtxDirect = HandlerContext<TRequest>.Create(sp, request, ct);
+            var scopedVtDirect = scopedEntry.Invoke(scopedCtxDirect).AwaitAndReturnHandlerInvoke(scopedCtxDirect);
+
+            if (scopedVtDirect.IsCompletedSuccessfully)
+            {
+                scope.Dispose();
+                return scopedVtDirect;
+            }
+
+            return Await(scopedVtDirect, scope);
         }
 
         var scopedCtx = HandlerContext<TRequest>.Create(sp, request, ct);
-
         var scopedVt = spaceRegistry.DispatchHandler<TRequest, TResponse>(sp, scopedCtx, name).AwaitAndReturnHandlerInvoke(scopedCtx);
 
         if (scopedVt.IsCompletedSuccessfully)
@@ -132,18 +172,67 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         }
     }
 
-    // Constrained overloads to avoid boxing for IRequest<TResponse>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ValueTask<TResponse> Send<TRequest, TResponse>(in TRequest request, CancellationToken ct = default)
-        where TRequest : struct, IRequest<TResponse>
+    public ValueTask<TResponse> Send<TResponse>(IRequest<TResponse> request, string name = null, CancellationToken ct = default)
         where TResponse : notnull
-            => Send<TRequest, TResponse>(request, null, ct);
+    {
+        if (ct.IsCancellationRequested)
+            return ValueTask.FromCanceled<TResponse>(ct);
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ValueTask<TResponse> Send<TRequest, TResponse>(TRequest request, CancellationToken ct = default)
-        where TRequest : class, IRequest<TResponse>
-        where TResponse : notnull
-            => Send<TRequest, TResponse>(request, null, ct);
+        if (IsFastPath(spaceRegistry.HandlerLifetime))
+        {
+            // Try runtime-type lookup without expression/MakeGenericMethod
+            if (spaceRegistry.TryGetHandlerEntryByRuntimeType(request.GetType(), typeof(TResponse), name, out var entryObj)
+                && entryObj is SpaceRegistry.IObjectHandlerEntry entry)
+            {
+                var hctx = HandlerContextStruct.Create(rootProvider, request, this, ct);
+                var vto = entry.InvokeObject(hctx);
+
+                if (vto.IsCompletedSuccessfully)
+                    return new ValueTask<TResponse>((TResponse)vto.Result!);
+                
+                return AwaitFast1(vto);
+
+                static async ValueTask<TResponse> AwaitFast1(ValueTask<object> vt)
+                    => (TResponse)await vt.ConfigureAwait(false);
+            }
+
+            // Fallback: object dispatch through registry (still no expression compile)
+            var vtoFallback = spaceRegistry.DispatchHandler(request, name, typeof(TResponse), rootProvider, ct);
+
+            if (vtoFallback.IsCompletedSuccessfully)
+                return new ValueTask<TResponse>((TResponse)vtoFallback.Result!);
+
+            return AwaitFast2(vtoFallback);
+
+            static async ValueTask<TResponse> AwaitFast2(ValueTask<object> vt)
+                => (TResponse)await vt.ConfigureAwait(false);
+        }
+
+        // Scoped path
+        using var scope = scopeFactory.CreateScope();
+        if (ct.IsCancellationRequested)
+            return ValueTask.FromCanceled<TResponse>(ct);
+
+        var vts = spaceRegistry.DispatchHandler(request, name, typeof(TResponse), scope.ServiceProvider, ct);
+
+        if (vts.IsCompletedSuccessfully)
+            return new ValueTask<TResponse>((TResponse)vts.Result!);
+
+        return AwaitScoped(vts, scope);
+
+        static async ValueTask<TResponse> AwaitScoped(ValueTask<object> vt, IServiceScope scope)
+        {
+            try 
+            {
+                return (TResponse)await vt.ConfigureAwait(false); 
+            }
+            finally 
+            {
+                scope.Dispose(); 
+            }
+        }
+    }
 
     #endregion
 
@@ -180,7 +269,7 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         {
             using var scope = scopeFactory.CreateScope();
 
-            if (token.IsCancellationRequested) 
+            if (token.IsCancellationRequested)
                 return await ValueTask.FromCanceled<TRes>(token);
 
             var result = await spaceRegistry.DispatchHandler(req, handlerName, typeof(TRes), scope.ServiceProvider, token);
@@ -212,12 +301,6 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
     #endregion
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ValueTask<TResponse> Send<TResponse>(IRequest<TResponse> request, string name = null, CancellationToken ct = default)
-        => Send<TResponse>((object)request, name, ct);
-
-    #region Publish
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ValueTask Publish<TRequest>(TRequest request, CancellationToken ct = default)
     {
         if (ct.IsCancellationRequested)
@@ -226,7 +309,8 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         if (IsFastPath(spaceRegistry.HandlerLifetime))
         {
             var ctxFast = NotificationContext<TRequest>.Create(rootProvider, request, ct);
-            return spaceRegistry.DispatchNotification(ctxFast).AwaitAndReturnNotificationInvoke(ctxFast);
+            var vt = spaceRegistry.FastDispatchNotification(ctxFast).AwaitAndReturnNotificationInvoke(ctxFast);
+            return vt;
         }
 
         return SlowPublishScoped(request, ct);
@@ -235,13 +319,13 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         {
             using var scope = scopeFactory.CreateScope();
 
-            if (token.IsCancellationRequested) 
-              return;
-            
+            if (token.IsCancellationRequested)
+                return;
+
             var ctx = NotificationContext<TRequest>.Create(scope.ServiceProvider, req, token);
             var vt = spaceRegistry.DispatchNotification(ctx).AwaitAndReturnNotificationInvoke(ctx);
 
-            if (!vt.IsCompletedSuccessfully) 
+            if (!vt.IsCompletedSuccessfully)
                 await vt;
         }
     }
@@ -255,7 +339,8 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         if (IsFastPath(spaceRegistry.HandlerLifetime))
         {
             var ctxFast = NotificationContext<TRequest>.Create(rootProvider, request, ct);
-            return spaceRegistry.DispatchNotification(ctxFast, dispatchType).AwaitAndReturnNotificationInvoke(ctxFast);
+            var vt = spaceRegistry.FastDispatchNotification(ctxFast, dispatchType).AwaitAndReturnNotificationInvoke(ctxFast);
+            return vt;
         }
 
         return SlowPublishScoped(request, dispatchType, ct);
@@ -275,5 +360,5 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         }
     }
 
-    #endregion
+    
 }

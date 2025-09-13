@@ -1,7 +1,9 @@
 ﻿using Microsoft.CodeAnalysis;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Xml.Linq;
 
 namespace Space.SourceGenerator.Extensions;
@@ -148,6 +150,73 @@ public static class MethodSymbolExtensions
         }
     }
 
+    // New: returns C# code literals/expressions for attribute values (for codegen)
+    public static Dictionary<string, string> GetPropertiesAsLiterals(this AttributeData attr)
+    {
+        try
+        {
+            var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (attr == null)
+                return dict;
+
+            // Named arguments first
+            foreach (var named in attr.NamedArguments)
+            {
+                dict[named.Key] = FormatTypedConstantAsLiteral(named.Value);
+            }
+
+            // Positional (constructor) arguments
+            var ctor = attr.AttributeConstructor;
+            if (ctor != null)
+            {
+                var ctorArgs = attr.ConstructorArguments;
+                var properties = attr.AttributeClass?.GetMembers().OfType<IPropertySymbol>().ToList() ?? [];
+                var usedParamIndexes = new HashSet<int>();
+
+                // Raw parameter names
+                for (int i = 0; i < ctor.Parameters.Length && i < ctorArgs.Length; i++)
+                {
+                    var param = ctor.Parameters[i];
+                    dict[param.Name] = FormatTypedConstantAsLiteral(ctorArgs[i]);
+                }
+
+                // Type-based mapping to property names (unambiguous only)
+                foreach (var prop in properties)
+                {
+                    if (dict.ContainsKey(prop.Name))
+                        continue; // already set by named args
+
+                    var candidates = new List<int>();
+                    for (int i = 0; i < ctor.Parameters.Length && i < ctorArgs.Length; i++)
+                    {
+                        if (usedParamIndexes.Contains(i))
+                            continue;
+
+                        var p = ctor.Parameters[i];
+                        if (SymbolEqualityComparer.Default.Equals(p.Type, prop.Type) ||
+                            string.Equals(p.Type?.Name, prop.Type?.Name, StringComparison.Ordinal))
+                        {
+                            candidates.Add(i);
+                        }
+                    }
+
+                    if (candidates.Count == 1)
+                    {
+                        var idx = candidates[0];
+                        dict[prop.Name] = FormatTypedConstantAsLiteral(ctorArgs[idx]);
+                        usedParamIndexes.Add(idx);
+                    }
+                }
+            }
+
+            return dict;
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
     /// <summary>
     /// Returns value of an attribute argument by logical property name.
     /// Order: named args -> positional ctor arg selected by type match (unambiguous).
@@ -234,5 +303,101 @@ public static class MethodSymbolExtensions
         }
 
         return tc.Value;
+    }
+
+    private static string FormatTypedConstantAsLiteral(TypedConstant tc)
+    {
+        if (tc.IsNull)
+            return "null";
+
+        if (tc.Kind == TypedConstantKind.Array)
+        {
+            var items = tc.Values.Select(FormatTypedConstantAsLiteral).ToArray();
+            return "new object[] { " + string.Join(", ", items) + " }";
+        }
+
+        if (tc.Type is INamedTypeSymbol tcType && tcType.TypeKind == TypeKind.Enum)
+        {
+            var val = tc.Value;
+            if (val != null)
+            {
+                var field = tcType.GetMembers()
+                                   .OfType<IFieldSymbol>()
+                                   .FirstOrDefault(f => f.HasConstantValue && Equals(f.ConstantValue, val));
+                if (field != null)
+                {
+                    return tcType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + field.Name;
+                }
+            }
+            // Fallback: numeric literal
+            return Convert.ToString(val, CultureInfo.InvariantCulture);
+        }
+
+        if (tc.Value is ITypeSymbol ts)
+        {
+            var name = ts.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            return "typeof(" + name + ")";
+        }
+
+        // Primitive/string
+        var v = tc.Value;
+        if (v is string s)
+        {
+            return QuoteString(s);
+        }
+        if (v is char ch)
+        {
+            return "'" + EscapeChar(ch) + "'";
+        }
+        if (v is bool b)
+        {
+            return b ? "true" : "false";
+        }
+        if (v is IFormattable form)
+        {
+            return form.ToString(null, CultureInfo.InvariantCulture);
+        }
+
+        // Fallback to ToString quoted
+        return QuoteString(v?.ToString() ?? string.Empty);
+    }
+
+    private static string QuoteString(string s)
+    {
+        var sb = new StringBuilder();
+        sb.Append('"');
+        foreach (var c in s)
+        {
+            switch (c)
+            {
+                case '\\': sb.Append("\\\\"); break;
+                case '"': sb.Append("\\\""); break;
+                case '\n': sb.Append("\\n"); break;
+                case '\r': sb.Append("\\r"); break;
+                case '\t': sb.Append("\\t"); break;
+                case '\0': sb.Append("\\0"); break;
+                case '\a': sb.Append("\\a"); break;
+                case '\b': sb.Append("\\b"); break;
+                case '\f': sb.Append("\\f"); break;
+                case '\v': sb.Append("\\v"); break;
+                default: sb.Append(c); break;
+            }
+        }
+        sb.Append('"');
+        return sb.ToString();
+    }
+
+    private static string EscapeChar(char c)
+    {
+        switch (c)
+        {
+            case '\\': return "\\\\";
+            case '\'': return "\\'";
+            case '\n': return "\\n";
+            case '\r': return "\\r";
+            case '\t': return "\\t";
+            case '\0': return "\\0";
+            default: return c.ToString();
+        }
     }
 }
