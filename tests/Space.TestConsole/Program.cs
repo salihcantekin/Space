@@ -81,7 +81,7 @@ Log.Add("DONE!");
 
 
 public class TestHandler
-//: IHandler<UserCreateCommand, UserCreateResponse>
+: IHandler<UserCreateCommand, UserCreateResponse>
 {
     //[Handle(Name = "NothingHandle")]
     //[CacheModule(Duration = 5)]
