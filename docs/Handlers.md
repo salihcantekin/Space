@@ -4,7 +4,7 @@ Handlers in Space are methods marked with the `[Handle]` attribute. They process
 
 ## Example
 ```csharp
-public record UserLoginRequest(string UserName);
+public record UserLoginRequest(string UserName) : IRequest<UserLoginResponse>;
 public record UserLoginResponse(bool Success);
 
 public partial class UserHandlers
@@ -13,32 +13,38 @@ public partial class UserHandlers
     public async ValueTask<UserLoginResponse> Login(HandlerContext<UserLoginRequest> ctx)
     {
         var userService = ctx.ServiceProvider.GetService<UserService>();
-        var loginModel = ctx.Request;
-        var userExists = await userService.Login(loginModel);
-        return new UserLoginResponse() { Success = userExists };
+        var userExists = await userService.Login(ctx.Request);
+        return new UserLoginResponse(userExists);
     }
 }
 ```
 
 ## Usage
+Preferred strongly-typed usage:
 ```csharp
 ISpace space = serviceProvider.GetRequiredService<ISpace>();
-var loginResponse = await space.Send<UserLoginResponse>(new UserLoginRequest { UserName = "sc" });
+var loginResponse = await space.Send<UserLoginRequest, UserLoginResponse>(new UserLoginRequest("sc"));
 ```
+
+Additional overloads:
+- IRequest overload: `await space.Send<UserLoginResponse>(IRequest<UserLoginResponse> request, string? name = null)`
+- Object overload: `await space.Send<UserLoginResponse>(object request, string? name = null)`
+
+> Rule: In `Send<TRequest, TResponse>`, `TRequest` must implement `IRequest<TResponse>`. This is enforced at compile time.
 
 Handlers can be named using the `Name` parameter and invoked by name:
 ```csharp
 [Handle(Name = "CustomHandler")]
 public ValueTask<ResponseType> CustomHandler(HandlerContext<RequestType> ctx) { ... }
 
-var response = await space.Send<ResponseType>(request, name: "CustomHandler");
+var response = await space.Send<RequestType, ResponseType>(new RequestType(...), name: "CustomHandler");
 ```
 
 ## Selecting default handler with IsDefault
 When multiple handlers exist for the same request/response pair, you can mark one as the default so that `Send` without a name uses it.
 
 ```csharp
-public record PriceQuery(int Id);
+public record PriceQuery(int Id) : IRequest<PriceResult>;
 public record PriceResult(string Tag);
 
 public class PricingHandlers

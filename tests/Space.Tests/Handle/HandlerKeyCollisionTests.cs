@@ -10,7 +10,7 @@ namespace Space.Tests.Handle;
 [TestClass]
 public class HandlerKeyCollisionTests
 {
-    public record Req(int Id) : IRequest<ResA>;
+    public record Req(int Id) : IRequest<ResA>, IRequest<ResB>;
     public record ResA(string Value);
     public record ResB(string Value);
 

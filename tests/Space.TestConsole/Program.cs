@@ -70,7 +70,10 @@ var command = new UserCreateCommand() { Email = "salihcantekin@gmail.com", Name 
 //    _ = await space.Send<UserCreateResponse>(command);
 //}
 
-var res = await space.Send<UserCreateResponse>(command);
+var res = await space.Send<UserCreateCommand, UserCreateResponse>(command);
+
+
+
 //res = await space.Send(command);
 
 

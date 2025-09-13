@@ -27,6 +27,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{02EA681E-C
 		docs\Pipelines.md = docs\Pipelines.md
 		docs\PlannedImprovements.md = docs\PlannedImprovements.md
 		docs\ProjectDoc.en.md = docs\ProjectDoc.en.md
+		docs\Versioning.md = docs\Versioning.md
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "github", "github", "{13AA0D40-B562-4388-B5F9-C4612A784505}"
