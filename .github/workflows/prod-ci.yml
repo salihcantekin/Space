@@ -3,6 +3,7 @@ name: Prod CI (Stable Publish)
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 concurrency:
   group: prod-ci
