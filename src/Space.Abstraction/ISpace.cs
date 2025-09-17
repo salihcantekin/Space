@@ -10,9 +10,14 @@ public interface ISpace
     ValueTask Publish<TRequest>(TRequest request, CancellationToken ct = default);
     ValueTask Publish<TRequest>(TRequest request, NotificationDispatchType dispatchType, CancellationToken ct = default);
 
-    // Preferred strongly-typed send; enforces TRequest : IRequest<TResponse>
+    // Strongly-typed send for reference-type requests implementing IRequest<TResponse>
     ValueTask<TResponse> Send<TRequest, TResponse>(TRequest request, string name = null, CancellationToken ct = default)
-        where TRequest : notnull, IRequest<TResponse>
+        where TRequest : class, IRequest<TResponse>
+        where TResponse : notnull;
+
+    // Struct-friendly send for value-type requests (no IRequest<> requirement)
+    ValueTask<TResponse> Send<TRequest, TResponse>(in TRequest request, string name = null, CancellationToken ct = default)
+        where TRequest : struct
         where TResponse : notnull;
 
     // Convenience overload for IRequest<TResponse>
