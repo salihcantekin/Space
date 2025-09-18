@@ -21,8 +21,7 @@ High-performance, source-generator powered mediator / messaging framework for .N
 
 ### Install (Minimal)
 ```bash
-dotnet add package Space.Abstraction
-dotnet add package Space.DependencyInjection
+dotnet add package Space.DependencyInjection (brings Space.Abstraction)
 ```
 Optional module:
 ```bash
@@ -39,6 +38,7 @@ services.AddSpace(opt =>
 {
     opt.NotificationDispatchType = NotificationDispatchType.Parallel; // or Sequential
 });
+
 services.AddSpaceInMemoryCache(); // if caching module needed
 
 var provider = services.BuildServiceProvider();

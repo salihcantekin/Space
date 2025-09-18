@@ -3,6 +3,12 @@ name: Dev CI (Preview Publish)
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Release version (vX.Y.Z or X.Y.Z). Leave empty to use latest release tag'
+        required: false
+        type: string
 
 concurrency:
   group: dev-ci
@@ -10,7 +16,8 @@ concurrency:
 
 jobs:
   dev-preview:
-    if: ${{ github.event.release.prerelease == true }}
+    # Run when triggered manually OR on prerelease publishes
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && github.event.release.prerelease == true) }}
     runs-on: ubuntu-latest
     env:
       DOTNET_NOLOGO: true
@@ -28,18 +35,38 @@ jobs:
             8.x
             9.x
 
-      - name: Set Preview Version from Release Tag
+      - name: Get Latest Release Tag
+        id: latest
+        uses: actions/github-script@v7
+        with:
+            script: |
+              const { data } = await github.rest.repos.getLatestRelease({ owner: context.repo.owner, repo: context.repo.repo });
+              core.setOutput('tag', data.tag_name);
+
+      - name: Determine Preview Version
         id: version
         shell: bash
         run: |
           set -euo pipefail
-          RAW_TAG="${{ github.event.release.tag_name }}"
-          if [[ -z "$RAW_TAG" ]]; then
-            echo "Release tag name is empty" >&2
+          RAW_INPUT="${{ github.event.inputs.release || '' }}"
+          RAW_TAG="${{ github.event.release.tag_name || '' }}"
+          LATEST_TAG="${{ steps.latest.outputs.tag || '' }}"
+
+          # Pick source tag: user input > release event tag > latest release tag
+          SRC_TAG="$RAW_INPUT"
+          if [[ -z "$SRC_TAG" ]]; then
+            SRC_TAG="$RAW_TAG"
+          fi
+          if [[ -z "$SRC_TAG" ]]; then
+            SRC_TAG="$LATEST_TAG"
+          fi
+          if [[ -z "$SRC_TAG" ]]; then
+            echo "No version provided and no release tag available." >&2
             exit 1
           fi
+
           # Normalize possible inputs (e.g., refs/tags/v1.0.0, v1.0.0, 1.0.0)
-          TAG=$(echo -n "$RAW_TAG" | tr -d '[:space:]')
+          TAG=$(echo -n "$SRC_TAG" | tr -d '[:space:]')
           TAG=${TAG#refs/tags/}
           TAG=${TAG#tags/}
           # Strip a single leading v or V
@@ -50,11 +77,11 @@ jobs:
           fi
           # Basic SemVer (allow pre-release/build metadata)
           if [[ ! "$BASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+].*)?$ ]]; then
-            echo "Tag '$RAW_TAG' produced invalid base version '$BASE_VERSION'. Expected '1.2.3' or 'v1.2.3'." >&2
+            echo "Input '$SRC_TAG' produced invalid base version '$BASE_VERSION'. Expected '1.2.3' or 'v1.2.3'." >&2
             exit 1
           fi
           PREVIEW_VERSION="${BASE_VERSION}-preview"
-          echo "Using preview version: $PREVIEW_VERSION from tag: $RAW_TAG"
+          echo "Using preview version: $PREVIEW_VERSION (source: $SRC_TAG)"
           echo "VERSION=$PREVIEW_VERSION" >> $GITHUB_ENV
 
       - name: Restore
