@@ -17,7 +17,7 @@ High-performance, source-generator powered mediator / messaging framework for .N
 |---------|--------|---------|-----------|-------------|
 | Space.Abstraction | ![NuGet](https://img.shields.io/nuget/v/Space.Abstraction.svg) | ![NuGet (pre)](https://img.shields.io/nuget/vpre/Space.Abstraction.svg) | ![Downloads](https://img.shields.io/nuget/dt/Space.Abstraction.svg) | Core abstractions: attributes, contexts, contracts |
 | Space.DependencyInjection | ![NuGet](https://img.shields.io/nuget/v/Space.DependencyInjection.svg) | ![NuGet (pre)](https://img.shields.io/nuget/vpre/Space.DependencyInjection.svg) | ![Downloads](https://img.shields.io/nuget/dt/Space.DependencyInjection.svg) | DI extensions + source generator bootstrap |
-| Space.Modules.InMemoryCache | ![NuGet](https://img.shields.io/nuget/v/Space.Modules.InMemoryCache.svg) | ![NuGet (pre)](https://img.shields.io/nuget/vpre/Space.Modules.InMemoryCache.svg) | ![Downloads](https://img.shields.io/nuget/dt/Space.Modules.InMemoryCache.svg) | In-memory caching module + attribute integration |
+| [Space.Modules.InMemoryCache](https://github.com/salihcantekin/Space.Modules.InMemoryCache) | ![NuGet](https://img.shields.io/nuget/v/Space.Modules.InMemoryCache.svg) | ![NuGet (pre)](https://img.shields.io/nuget/vpre/Space.Modules.InMemoryCache.svg) | ![Downloads](https://img.shields.io/nuget/dt/Space.Modules.InMemoryCache.svg) | In-memory caching module + attribute integration |
 
 ### Install (Minimal)
 ```bash
