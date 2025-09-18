@@ -9,6 +9,11 @@ on:
         description: 'Release version (vX.Y.Z or X.Y.Z). Leave empty to use latest release tag'
         required: false
         type: string
+      prerelease:
+        description: 'Publish as prerelease (preview). Must be false for Prod CI'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: prod-ci
@@ -16,8 +21,8 @@ concurrency:
 
 jobs:
   prod-ci:
-    # Run when triggered manually OR on stable release publishes
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && github.event.release.prerelease == false) }}
+    # Run when triggered manually with prerelease=false OR on stable release publishes
+    if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease == 'false') || (github.event_name == 'release' && github.event.release.prerelease == false) }}
     runs-on: ubuntu-latest
     env:
       DOTNET_NOLOGO: true
