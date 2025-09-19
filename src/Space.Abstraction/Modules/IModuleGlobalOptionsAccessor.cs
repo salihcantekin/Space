@@ -7,13 +7,13 @@ namespace Space.Abstraction.Modules;
 /// Example: for Audit -> IReadOnlyDictionary&lt;string, AuditModuleOptions&gt;
 /// </summary>
 public interface IModuleGlobalOptionsAccessor<TModuleOptions>
-    where TModuleOptions : BaseModuleOptions
+    where TModuleOptions : class
 {
     IReadOnlyDictionary<string, TModuleOptions> Profiles { get; }
 }
 
 public sealed class ModuleGlobalOptionsAccessor<TModuleOptions> : IModuleGlobalOptionsAccessor<TModuleOptions>
-    where TModuleOptions : BaseModuleOptions
+    where TModuleOptions : class
 {
     public ModuleGlobalOptionsAccessor(IReadOnlyDictionary<string, TModuleOptions> profiles)
     {
