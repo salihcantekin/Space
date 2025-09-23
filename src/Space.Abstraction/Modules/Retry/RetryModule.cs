@@ -1,4 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Space.Abstraction.Modules.Options;
 using System;
 using System.Collections.Generic;
 
@@ -33,25 +35,21 @@ public class RetryModule(IServiceProvider serviceProvider) : SpaceModule(service
     {
         return GetOrAddConfig(moduleKey, () =>
         {
-            IReadOnlyDictionary<string, object> defaultProps = new Dictionary<string, object>();
-
-            var globalProfiles = GetGlobalProfiles();
-            var requested = NormalizeProfileName(moduleKey.ProfileName);
-            if (!globalProfiles.TryGetValue(requested, out var profileOpt))
+            // Try new Options pattern first, fallback to legacy approach
+            var optionsProvider = ServiceProvider.GetService<IModuleOptionsProvider<RetryOptions>>();
+            if (optionsProvider != null)
             {
-                globalProfiles.TryGetValue(ModuleConstants.DefaultProfileName, out profileOpt);
+                var options = optionsProvider.GetOptions(moduleKey);
+                // Convert RetryOptions to RetryModuleConfig for backward compatibility
+                return new RetryModuleConfig
+                {
+                    RetryCount = options.RetryCount,
+                    DelayMilliseconds = options.DelayMilliseconds
+                };
             }
-            var globalProfileProps = ExtractProfileProperties(profileOpt);
 
-            var attributeConfig = ServiceProvider.GetKeyedService<ModuleConfig>(moduleKey);
-            var attributeProps = attributeConfig?.GetAllModuleProperties();
-
-            var merged = ModuleConfigMerge.Merge(defaultProps, globalProfileProps, attributeProps);
-
-            var cfg = new RetryModuleConfig();
-            RetrySettingsPropertiesMapper.ApplyTo(cfg, merged);
-
-            return cfg;
+            // Legacy approach for backward compatibility
+            return ServiceProvider.GetLegacyRetryConfig(moduleKey);
         });
     }
 
