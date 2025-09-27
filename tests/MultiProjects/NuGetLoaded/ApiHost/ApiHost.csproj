@@ -7,7 +7,7 @@
 		<!-- Mark this as root so source generator aggregates satellite libraries -->
 		<SpaceGenerateRootAggregator>true</SpaceGenerateRootAggregator>
 
-		<UseLocalSpaceProjects>false</UseLocalSpaceProjects>
+		<UseLocalSpaceProjects>true</UseLocalSpaceProjects>
 	</PropertyGroup>
 
 	<ItemGroup Condition="'$(UseLocalSpaceProjects)'=='true'">
