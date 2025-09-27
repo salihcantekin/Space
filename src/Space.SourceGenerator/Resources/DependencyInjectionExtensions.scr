@@ -4,36 +4,20 @@
 
 using System;
 using System.Threading.Tasks;
+using System.Reflection;
+using System.Linq;
 using Space.Abstraction;
 using Space.Abstraction.Context;
 using Space.Abstraction.Registry;
 using Space.Abstraction.Modules;
 using Space.Abstraction.Registry.Dispatchers;
 using Microsoft.Extensions.DependencyInjection;
+using Space.Abstraction.Helpers; // shared helpers
 
 namespace Space.DependencyInjection
 {
     public static class SourceGeneratorDependencyInjectionExtensions
     {
-        // Light invoker state holder (per TReq per thread)
-        internal static class LightInvokerState<TReq, THandler, TRes>
-        {
-            [ThreadStatic] private static HandlerContext<TReq> _ctx;
-            public static ValueTask<TRes> Invoke(in LightHandlerContext<TReq> lctx, THandler singleton, bool isSingleton,
-                                                 Func<THandler, HandlerContext<TReq>, ValueTask<TRes>> body)
-            {
-                var ctx = _ctx;
-                if (ctx == null)
-                {
-                    ctx = new HandlerContext<TReq>();
-                    _ctx = ctx;
-                }
-                ctx.Initialize(lctx.Request, lctx.ServiceProvider, lctx.Space, lctx.CancellationToken);
-                var inst = isSingleton ? singleton : ctx.ServiceProvider.GetRequiredService<THandler>();
-                return body(inst, ctx);
-            }
-        }
-
         public static IServiceCollection AddSpaceSourceGenerated(this IServiceCollection services)
             => AddSpaceInternal(services, new SpaceOptions());
 
@@ -46,7 +30,7 @@ namespace Space.DependencyInjection
 
         private static IServiceCollection AddSpaceInternal(IServiceCollection services, SpaceOptions options)
         {
-            // Core registrations
+            // Core registrations (root aggregator)
             services.AddSingleton<ISpace, global::Space.DependencyInjection.Space>();
             services.AddSingleton<ModuleFactory>();
 
@@ -55,7 +39,23 @@ namespace Space.DependencyInjection
             else
                 services.AddSingleton<INotificationDispatcher, SequentialNotificationDispatcher>();
 
-            // Batch register handler types (trailing comma style to avoid loop.last logic)
+            // Discover assembly-scoped registration helper types generated in referenced projects
+            var registrationTypes = AppDomain.CurrentDomain.GetAssemblies()
+                .SelectMany(a => SafeGetTypes(a))
+                .Where(t => t.IsClass && t.IsAbstract && t.IsSealed && t.Name.StartsWith("SpaceAssemblyRegistration_", StringComparison.Ordinal))
+                .ToArray();
+
+            // Register external assembly handler service types BEFORE building provider
+            foreach (var rt in registrationTypes)
+            {
+                var ms = rt.GetMethod("RegisterAssemblyServices", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+                if (ms != null)
+                {
+                    try { ms.Invoke(null, new object[] { services, options.ServiceLifetime }); } catch { /* ignore */ }
+                }
+            }
+
+            // Also register handlers belonging to root assembly (current project)
             var handlerTypes = new Type[] {
                 {{ for handler in AllHandlersName }}
                 typeof({{ handler }}),
@@ -70,8 +70,7 @@ namespace Space.DependencyInjection
                 registry.HandlerLifetime = options.ServiceLifetime;
                 bool isSingleton = options.ServiceLifetime == ServiceLifetime.Singleton;
 
-                static ValueTask<T> VT<T>(Task<T> task) => task.IsCompletedSuccessfully ? new ValueTask<T>(task.Result) : new ValueTask<T>(task);
-
+                {{ if NeedsReg }}
                 void Reg<THandler, TReq, TRes>(string name, Func<THandler, HandlerContext<TReq>, ValueTask<TRes>> body,
                                                 System.Collections.Generic.IEnumerable<(PipelineConfig config, PipelineInvoker<TReq, TRes> invoker)> pipes = null)
                 {
@@ -82,7 +81,9 @@ namespace Space.DependencyInjection
                         return body(inst, ctx);
                     }, name, pipes, null);
                 }
+                {{ end }}
 
+                {{ if NeedsRegLight }}
                 void RegLight<THandler, TReq, TRes>(string name, Func<THandler, HandlerContext<TReq>, ValueTask<TRes>> body)
                 {
                     THandler singleton = isSingleton ? sp.GetRequiredService<THandler>() : default!;
@@ -92,12 +93,13 @@ namespace Space.DependencyInjection
                         return body(inst, ctx);
                     };
 
-                    LightHandlerInvoker<TReq, TRes> light = (in LightHandlerContext<TReq> lctx) =>
-                        LightInvokerState<TReq, THandler, TRes>.Invoke(in lctx, singleton, isSingleton, body);
+                    LightHandlerInvoker<TReq, TRes> light = SpaceGeneratorRuntimeHelpers.CreateLightInvoker<TReq, THandler, TRes>(singleton, isSingleton, body);
 
                     registry.RegisterHandler<TReq, TRes>(normal, name, null, light);
                 }
+                {{ end }}
 
+                {{ if NeedsRegPipe }}
                 void RegPipe<TReq, TRes, TPipe>(string handlerName, PipelineConfig cfg, Func<TPipe, PipelineContext<TReq>, PipelineDelegate<TReq, TRes>, ValueTask<TRes>> invoker)
                 {
                     if (isSingleton)
@@ -115,13 +117,16 @@ namespace Space.DependencyInjection
                         });
                     }
                 }
+                {{ end }}
 
+                {{ if NeedsRegModule }}
                 void RegModule<TReq, TRes>(string handlerName, string moduleName, string profileName)
                 {
                     registry.RegisterModule<TReq, TRes>(moduleName, handlerName, profileName);
                 }
+                {{ end }}
 
-                // New: notifications registrar using runtime singleton flag
+                {{ if NeedsRegNotification }}
                 void RegNotification<TReq, THandler>(Func<THandler, NotificationContext<TReq>, ValueTask> call)
                 {
                     if (isSingleton)
@@ -138,26 +143,26 @@ namespace Space.DependencyInjection
                         });
                     }
                 }
+                {{ end }}
 
-                // Notifications (unnamed)
+                // Root assembly notifications
                 {{ for n in Notifications }}
                 RegNotification<{{ n.RequestParameterTypeName }}, {{ n.ClassFullName }}>((inst, ctx) => inst.{{ n.MethodName }}(ctx));
                 {{ end }}
 
-                // Handlers / Pipelines / Modules
+                // Root assembly handlers / pipelines / modules
                 {{ for h in OrderedHandlers }}
                 {{ if (h.PipelineCompileModels.size == 0 && h.ModuleCompileModels.size == 0) }}
-                // Light path (no pipelines/modules)
                 RegLight<{{ h.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}",
-                    (inst, ctx) => {{ if h.IsValueTask }} inst.{{ h.MethodName }}(ctx) {{ else }} VT(inst.{{ h.MethodName }}(ctx)) {{ end }});
+                    (inst, ctx) => {{ if h.IsValueTask }} inst.{{ h.MethodName }}(ctx) {{ else }} SpaceGeneratorRuntimeHelpers.VT(inst.{{ h.MethodName }}(ctx)) {{ end }});
                 {{ else }}
                 Reg<{{ h.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}",
-                    (inst, ctx) => {{ if h.IsValueTask }} inst.{{ h.MethodName }}(ctx) {{ else }} VT(inst.{{ h.MethodName }}(ctx)) {{ end }});
+                    (inst, ctx) => {{ if h.IsValueTask }} inst.{{ h.MethodName }}(ctx) {{ else }} SpaceGeneratorRuntimeHelpers.VT(inst.{{ h.MethodName }}(ctx)) {{ end }});
 
                     {{ for p in h.PipelineCompileModels }}
                     RegPipe<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}, {{ p.ClassFullName }}>("{{ h.HandlerName }}",
                         new PipelineConfig(){ Order = {{ p.Order }} },
-                        (pipe, ctx, next) => {{ if p.IsValueTask }} pipe.{{ p.MethodName }}(ctx, next) {{ else }} VT(pipe.{{ p.MethodName }}(ctx, next)) {{ end }});
+                        (pipe, ctx, next) => {{ if p.IsValueTask }} pipe.{{ p.MethodName }}(ctx, next) {{ else }} SpaceGeneratorRuntimeHelpers.VT(pipe.{{ p.MethodName }}(ctx, next)) {{ end }});
                     {{ end }}
 
                     {{ for m in h.ModuleCompileModels }}
@@ -166,11 +171,28 @@ namespace Space.DependencyInjection
                 {{ end }}
                 {{ end }}
 
+                // External assemblies handler registrations
+                foreach (var rt in registrationTypes)
+                {
+                    var mh = rt.GetMethod("RegisterAssemblyHandlers", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+                    if (mh != null)
+                    {
+                        try { mh.Invoke(null, new object[] { sp, registry, isSingleton }); } catch { /* ignore */ }
+                    }
+                }
+
                 registry.CompleteRegistration();
                 return registry;
             });
 
             return services;
+        }
+
+        private static System.Collections.Generic.IEnumerable<Type> SafeGetTypes(Assembly a)
+        {
+            try { return a.GetTypes(); }
+            catch (ReflectionTypeLoadException ex) { return ex.Types.Where(t => t != null)!; }
+            catch { return Array.Empty<Type>(); }
         }
     }
 }

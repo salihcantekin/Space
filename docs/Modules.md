@@ -2,6 +2,8 @@
 
 Modules in Space are system-level pipelines that perform predefined operations, such as caching or auditing. Modules are added via attributes to handler methods and require registration through extension methods.
 
+> Multi-Project Note: Module-decorated handlers in satellite libraries are picked up automatically when a single root project sets `<SpaceGenerateRootAggregator>true</SpaceGenerateRootAggregator>`. See `MultiProjectSetup.md`.
+
 ## Built-in Modules
 - **In-Memory Cache**: Add `[Cache(Duration = 60)]` to a handler and register with `services.AddSpaceInMemoryCache()`.
 - **Audit**: Add `[Audit]` to a handler and register with `services.AddSpaceAudit()`.

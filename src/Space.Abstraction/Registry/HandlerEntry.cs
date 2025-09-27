@@ -33,7 +33,6 @@ public partial class SpaceRegistry
         private HandlerInvoker<TRequest, TResponse> composedInvoke;
 
         // Single-pipeline fast path fields
-        private bool singlePipelineFast;
         private PipelineInvoker<TRequest, TResponse> singlePipelineInvoker;
         private PipelineDelegate<TRequest, TResponse> cachedFinalDelegate; // calls handlerInvoker with HandlerContextRef
 
@@ -105,7 +104,6 @@ public partial class SpaceRegistry
 
                 cachedRootDelegate = null;
                 composedInvoke = null;
-                singlePipelineFast = false;
                 singlePipelineInvoker = null;
                 cachedFinalDelegate = null;
 
@@ -123,7 +121,6 @@ public partial class SpaceRegistry
 
                     if (ordered.Length == 1)
                     {
-                        singlePipelineFast = true;
                         singlePipelineInvoker = ordered[0].Invoker;
 
                         composedInvoke = (ctx) =>

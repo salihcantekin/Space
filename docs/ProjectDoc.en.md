@@ -7,6 +7,7 @@ The goal of this project is to build a high?performance alternative to MediatR w
 - Allow multiple related handlers to co?exist in a single class via simple attributes.
 - Introduce an extensible Module system (e.g. Caching) implemented as system pipelines that run before user pipelines.
 - Support named handlers so multiple handlers for the same Request/Response can be selected explicitly at Send time.
+- NEW (Breaking Change): First-class multi-project handler discovery via a single root aggregator + per-assembly lightweight registration (see `MultiProjectSetup.md`).
 
 ## 2. Required NuGet Packages
 Core usage requires referencing:
@@ -29,6 +30,21 @@ services.AddSpaceInMemoryCache();
 var provider = services.BuildServiceProvider();
 ISpace space = provider.GetRequiredService<ISpace>();
 ```
+
+### 3.1 Multi-Project Root Aggregator Configuration (NEW)
+Add to exactly ONE project (host / composition root):
+```xml
+<PropertyGroup>
+  <SpaceGenerateRootAggregator>true</SpaceGenerateRootAggregator>
+</PropertyGroup>
+```
+All other handler libraries should either omit the property or set it to false:
+```xml
+<PropertyGroup>
+  <SpaceGenerateRootAggregator>false</SpaceGenerateRootAggregator>
+</PropertyGroup>
+```
+See `MultiProjectSetup.md` for full rationale and migration guidance.
 
 ## 4. Handler Implementation
 A handler is a method annotated with `[Handle]` taking `HandlerContext<TRequest>` and returning `ValueTask<TResponse>`.
@@ -70,10 +86,10 @@ Pipelines are middleware around handlers.
 public class UserPipelines
 {
     [Pipeline(Order = 1)] // Order is optional
-    public async ValueTask<UserLoginResponse> PipelineHandler(PipelineContext<UserLoginRequest> ctx)
+    public async ValueTask<UserLoginResponse> PipelineHandler(PipelineContext<UserLoginRequest> ctx, PipelineDelegate<UserLoginRequest, UserLoginResponse> next)
     {
         // Before
-        var response = await ctx.Next(ctx);
+        var response = await next(ctx);
         // After
         return response;
     }
@@ -103,12 +119,6 @@ public class UserHandlersNotifications
 }
 
 await space.Publish(new UserLoggedInSuccessfully("sc"));
-```
-Dispatch strategy (Parallel / Sequential) is configured globally. You can also override it per call:
-```csharp
-// Override globally configured strategy just for this call
-await space.Publish(new UserLoggedInSuccessfully("sc"), NotificationDispatchType.Parallel);
-await space.Publish(new UserLoggedInSuccessfully("sc"), NotificationDispatchType.Sequential);
 ```
 
 ## 7. Modules (System Pipelines)
@@ -195,6 +205,9 @@ This repository uses GitHub Releases to drive NuGet publishing. No packages are 
 
 - Local development:
   - Debug builds use a local version like `0.0.0-local` to avoid colliding with published packages.
+
+## 14. Multi-Project Setup Reference
+See `MultiProjectSetup.md` for detailed migration & configuration guidance for the new root aggregator model.
 
 ## License
 MIT

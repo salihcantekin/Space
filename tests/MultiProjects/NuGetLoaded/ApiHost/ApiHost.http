@@ -1,0 +1,25 @@
+﻿@scheme = http
+@host = localhost
+@port = 7747
+@baseUrl = {{scheme}}://{{host}}:{{port}}
+
+### Alpha endpoint
+GET {{baseUrl}}/alpha/hello
+Accept: application/json
+
+### Beta endpoint
+GET {{baseUrl}}/beta/42
+Accept: application/json
+
+### Multi endpoint
+GET {{baseUrl}}/multi/sample
+Accept: application/json
+
+### Notify endpoint
+GET {{baseUrl}}/notify/3
+Accept: application/json
+
+### Variable usage
+@msg = dynamic
+GET {{baseUrl}}/alpha/{{msg}}
+Accept: application/json

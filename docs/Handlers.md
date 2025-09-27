@@ -2,6 +2,8 @@
 
 Handlers in Space are methods marked with the `[Handle]` attribute. They process requests and return responses asynchronously. Handlers can be grouped in classes and can use attribute parameters for naming and modular configuration.
 
+> Multi-Project Note: If handlers live in multiple class libraries, ensure exactly one project sets `<SpaceGenerateRootAggregator>true</SpaceGenerateRootAggregator>` so that all satellite libraries' handlers are discovered. See `MultiProjectSetup.md`.
+
 ## Example
 ```csharp
 public record UserLoginRequest(string UserName) : IRequest<UserLoginResponse>;
