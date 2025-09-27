@@ -22,18 +22,15 @@
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)'=='Debug'">
-		<Version>0.0.0-local</Version>
-		<InformationalVersion>0.0.0-local+$(SourceRevisionId)</InformationalVersion>
+		<Version>0.0.7-local</Version>
+		<InformationalVersion>0.0.7-local+$(SourceRevisionId)</InformationalVersion>
 		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<None Include="icon.png" Pack="true" PackagePath="" />
 		<None Include="README.md" Pack="true" PackagePath="" />
-		<None Include="..\Space.SourceGenerator\bin\$(Configuration)\netstandard2.0\Space.SourceGenerator.dll" 
-			  Pack="true" 
-			  PackagePath="analyzers/dotnet/cs" 
-			  Visible="false" />
+		<None Include="..\Space.SourceGenerator\bin\$(Configuration)\netstandard2.0\Space.SourceGenerator.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" Condition="Exists('..\Space.SourceGenerator\bin\$(Configuration)\netstandard2.0\Space.SourceGenerator.dll')" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -45,5 +42,9 @@
 	<ItemGroup>
 		<ProjectReference Include="..\Space.Abstraction\Space.Abstraction.csproj" />
 	</ItemGroup>
+
+	<Target Name="BuildSourceGeneratorBeforePack" BeforeTargets="Pack">
+		<MSBuild Projects="..\Space.SourceGenerator\Space.SourceGenerator.csproj" Targets="Build" Properties="Configuration=$(Configuration)" />
+	</Target>
 
 </Project>

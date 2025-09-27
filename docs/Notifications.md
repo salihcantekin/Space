@@ -2,6 +2,8 @@
 
 Space provides a notification system for event-driven communication. Notification handlers are marked with the `[Notification]` attribute and receive events published via the `Publish` method. Notifications can be dispatched in parallel or sequentially.
 
+> Multi-Project Note: If notifications are defined in separate class libraries, ensure exactly one project is configured as root with `<SpaceGenerateRootAggregator>true</SpaceGenerateRootAggregator>` so satellite notification handlers are registered. See `MultiProjectSetup.md`.
+
 ## Example
 ```csharp
 public record UserLoggedInSuccessfully(string UserName);

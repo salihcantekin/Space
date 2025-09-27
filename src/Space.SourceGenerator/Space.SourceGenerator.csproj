@@ -46,11 +46,13 @@
 	<ItemGroup>
 		<AdditionalFiles Include="Resources\DependencyInjectionExtensions.scr" />
 		<AdditionalFiles Include="Resources\ModuleGenerationTemplate.scr" />
+		<AdditionalFiles Include="Resources\AssemblyRegistration.scr" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<EmbeddedResource Include="Resources\DependencyInjectionExtensions.scr" />
 		<EmbeddedResource Include="Resources\ModuleGenerationTemplate.scr" />
+		<EmbeddedResource Include="Resources\AssemblyRegistration.scr" />
 	</ItemGroup>
 
 </Project>
