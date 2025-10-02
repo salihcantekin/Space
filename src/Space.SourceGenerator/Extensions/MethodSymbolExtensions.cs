@@ -87,7 +87,7 @@ public static class MethodSymbolExtensions
         try
         {
             var dict = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-            if (attr == null) 
+            if (attr == null)
                 return dict;
 
             // Named arguments first
@@ -121,7 +121,7 @@ public static class MethodSymbolExtensions
                     var candidates = new List<int>();
                     for (int i = 0; i < ctor.Parameters.Length && i < ctorArgs.Length; i++)
                     {
-                        if (usedParamIndexes.Contains(i)) 
+                        if (usedParamIndexes.Contains(i))
                             continue;
 
                         var p = ctor.Parameters[i];
