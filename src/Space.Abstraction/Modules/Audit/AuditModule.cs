@@ -78,7 +78,7 @@ public class AuditModule(IServiceProvider serviceProvider) : SpaceModule(service
 
     private static Type ResolveType(string typeName)
     {
-        if (string.IsNullOrEmpty(typeName)) 
+        if (string.IsNullOrEmpty(typeName))
             return null;
 
         var tn = TrimGlobal(typeName);

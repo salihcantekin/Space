@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 namespace Space.Abstraction.Modules.Audit;
 
 
-public class AuditModulePipelineWrapper<TRequest, TResponse>: ModulePipelineWrapper<TRequest, TResponse>
+public class AuditModulePipelineWrapper<TRequest, TResponse> : ModulePipelineWrapper<TRequest, TResponse>
     where TRequest : notnull
     where TResponse : notnull
 {

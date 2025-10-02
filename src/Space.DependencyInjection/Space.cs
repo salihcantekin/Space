@@ -36,13 +36,13 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static async ValueTask<T> AwaitDispose<T>(ValueTask<T> task, IServiceScope scope)
     {
-        try 
-        { 
-            return await task; 
-        }
-        finally 
+        try
         {
-            scope.Dispose(); 
+            return await task;
+        }
+        finally
+        {
+            scope.Dispose();
         }
     }
 
@@ -206,7 +206,7 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
 
                 if (vto.IsCompletedSuccessfully)
                     return new ValueTask<TResponse>((TResponse)vto.Result!);
-                
+
                 return AwaitFast1(vto);
 
                 static async ValueTask<TResponse> AwaitFast1(ValueTask<object> vt)
@@ -395,5 +395,5 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
 
     #endregion
 
-    
+
 }

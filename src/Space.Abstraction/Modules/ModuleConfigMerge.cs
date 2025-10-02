@@ -14,9 +14,9 @@ public static class ModuleConfigMerge
 
         void AddRange(IReadOnlyDictionary<string, object> src)
         {
-            if (src == null) 
+            if (src == null)
                 return;
-             
+
             foreach (var kv in src)
             {
                 result[kv.Key] = kv.Value;
