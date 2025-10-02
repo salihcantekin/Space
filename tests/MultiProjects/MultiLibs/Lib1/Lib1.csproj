@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\..\..\src\Space.Abstraction\Space.Abstraction.csproj" />
+		<!--<ProjectReference Include="..\..\..\..\src\Space.DependencyInjection\Space.DependencyInjection.csproj" />-->
+		<!--<ProjectReference Include="..\..\..\..\src\Space.SourceGenerator\Space.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />-->
+	</ItemGroup>
+
+	<PropertyGroup>
+		<!--<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>-->
+		<!--<CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>-->
+		<UseSpaceGenerator>true</UseSpaceGenerator>
+		<SpaceGenerateRootAggregator>false</SpaceGenerateRootAggregator>
+	</PropertyGroup>
+
+</Project>

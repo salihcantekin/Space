@@ -30,6 +30,35 @@ public abstract class ProfileModuleOptions<T> : BaseModuleOptions where T : Base
     }
 }
 
+/// <summary>
+/// Variant for modules that only need per-profile options and do not want provider configuration.
+/// </summary>
+public abstract class ProfileOnlyModuleOptions<T> where T : class, new()
+{
+    private readonly Dictionary<string, T> profiles = [];
+
+    public IReadOnlyDictionary<string, T> Profiles => profiles;
+
+    public void WithDefaultProfile(Action<T> configure)
+    {
+        WithProfile("Default", configure);
+    }
+
+    public void WithProfile(string profileName, Action<T> configure)
+    {
+        if (string.IsNullOrWhiteSpace(profileName))
+            throw new ArgumentException("Profile name cannot be null or whitespace.", nameof(profileName));
+
+        if (configure is null)
+            throw new ArgumentNullException(nameof(configure), "Configure action cannot be null.");
+
+        var profileOptions = new T();
+        configure(profileOptions);
+
+        profiles[profileName] = profileOptions;
+    }
+}
+
 public abstract class BaseModuleOptions : IModuleOptions
 {
     public IModuleProvider ModuleProvider { get; private set; }

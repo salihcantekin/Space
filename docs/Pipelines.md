@@ -2,6 +2,8 @@
 
 Pipelines in Space act as middleware for handler execution. They are methods marked with the `[Pipeline]` attribute and can be ordered using the `Order` parameter. Pipelines can perform pre- and post-processing around handler logic.
 
+> Multi-Project Note: If pipeline methods live in separate class libraries, ensure only one root project sets `<SpaceGenerateRootAggregator>true</SpaceGenerateRootAggregator>` so satellite pipeline registrations are integrated. See `MultiProjectSetup.md`.
+
 ## Example
 ```csharp
 public record UserLoginRequest(string UserName) : IRequest<UserLoginResponse>;
