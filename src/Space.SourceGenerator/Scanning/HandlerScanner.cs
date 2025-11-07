@@ -29,12 +29,12 @@ internal static class HandlerScanner
     // returns (taskName, responseTypeName) where taskName is the name of the task type (e.g., Task, ValueTask)
     // and responseTypeName is the type of the response (e.g., string, int, etc.)
     // either from HandleAttribute or from the method signature
-    private static (string, string) GetHandlerResponseType(AttributeData handleAttr, IMethodSymbol methodSymbol)
+    private static (string, string, bool) GetHandlerResponseType(AttributeData handleAttr, IMethodSymbol methodSymbol)
     {
         var respTypeName = methodSymbol.GetResponseGenericTypeName();
         var taskName = methodSymbol.GetResponseTaskName();
-
-        return (taskName, respTypeName);
+        bool voidLike = methodSymbol.ReturnType is INamedTypeSymbol r && (r.Name == SourceGenConstants.Type.Task || r.Name == SourceGenConstants.Type.ValueTask) && r.TypeArguments.Length == 0;
+        return (taskName, respTypeName, voidLike);
     }
 
     public static IEnumerable<HandlersCompileModel> ScanHandlers(INamedTypeSymbol classSymbol,
@@ -45,7 +45,7 @@ internal static class HandlerScanner
             yield break;
 
         var reqType = GetHandlerRequestType(handleAttr, methodSymbol);
-        var (taskName, respType) = GetHandlerResponseType(handleAttr, methodSymbol);
+        var (taskName, respType, voidLike) = GetHandlerResponseType(handleAttr, methodSymbol);
 
         // nameof(HandleAttribute.Name)
         var model = new HandlersCompileModel(handleAttr.GetAttributeArgument("Name"))
@@ -55,6 +55,7 @@ internal static class HandlerScanner
             MethodName = methodSymbol.Name,
             ReturnTypeName = respType,
             ReturnTaskTypeName = taskName,
+            IsVoidLike = voidLike,
         };
 
         var isDefaultRaw = handleAttr.GetAttributeArgument("IsDefault");

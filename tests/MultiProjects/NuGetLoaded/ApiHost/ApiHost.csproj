@@ -3,25 +3,11 @@
 		<TargetFramework>net8.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
-		<!--<UseLocalSpaceProjects Condition="'$(UseLocalSpaceProjects)'==''">true</UseLocalSpaceProjects>-->
+
 		<!-- Mark this as root so source generator aggregates satellite libraries -->
 		<SpaceGenerateRootAggregator>true</SpaceGenerateRootAggregator>
 
-		<UseLocalSpaceProjects>true</UseLocalSpaceProjects>
 	</PropertyGroup>
-
-	<ItemGroup Condition="'$(UseLocalSpaceProjects)'=='true'">
-		<ProjectReference Include="../../../../src/Space.Abstraction/Space.Abstraction.csproj" />
-		<ProjectReference Include="../../../../src/Space.DependencyInjection/Space.DependencyInjection.csproj" />
-		<ProjectReference Include="../../../../src/Space.SourceGenerator/Space.SourceGenerator.csproj"
-						  OutputItemType="Analyzer"
-						  ReferenceOutputAssembly="false"/>
-	</ItemGroup>
-
-	<!--<ItemGroup Condition="'$(UseLocalSpaceProjects)'!='true'">
-		--><!--<PackageReference Include="Space.Abstraction" Version="0.0.0-local" />--><!--
-		<PackageReference Include="Space.DependencyInjection" Version="0.0.3-local" />
-	</ItemGroup>-->
 
 	<ItemGroup>
 		<ProjectReference Include="../LibAlpha/LibAlpha.csproj" />

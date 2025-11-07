@@ -10,6 +10,7 @@ using Space.Abstraction.Context;
 using Space.Abstraction.Registry;
 using Space.Abstraction.Modules;
 using Space.Abstraction.Registry.Dispatchers;
+using Space.Abstraction.Helpers;
 
 namespace Space.DependencyInjection
 {
@@ -114,10 +115,10 @@ namespace Space.DependencyInjection
             {{ for h in OrderedHandlers }}
             {{ if (h.PipelineCompileModels.size == 0 && h.ModuleCompileModels.size == 0) }}
             RegLight<{{ h.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}",
-                (inst, ctx) => {{ if h.IsValueTask }} inst.{{ h.MethodName }}(ctx) {{ else }} VT(inst.{{ h.MethodName }}(ctx)) {{ end }});
+                (inst, ctx) => {{ if h.IsVoidLike }} SpaceGeneratorRuntimeHelpers.ToNothing(inst.{{ h.MethodName }}(ctx)) {{ else }} {{ if h.IsValueTask }} inst.{{ h.MethodName }}(ctx) {{ else }} VT(inst.{{ h.MethodName }}(ctx)) {{ end }} {{ end }});
             {{ else }}
             Reg<{{ h.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}",
-                (inst, ctx) => {{ if h.IsValueTask }} inst.{{ h.MethodName }}(ctx) {{ else }} VT(inst.{{ h.MethodName }}(ctx)) {{ end }});
+                (inst, ctx) => {{ if h.IsVoidLike }} SpaceGeneratorRuntimeHelpers.ToNothing(inst.{{ h.MethodName }}(ctx)) {{ else }} {{ if h.IsValueTask }} inst.{{ h.MethodName }}(ctx) {{ else }} VT(inst.{{ h.MethodName }}(ctx)) {{ end }} {{ end }});
                 {{ for p in h.PipelineCompileModels }}
                 RegPipe<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}, {{ p.ClassFullName }}>("{{ h.HandlerName }}",
                     new PipelineConfig(){ Order = {{ p.Order }} },

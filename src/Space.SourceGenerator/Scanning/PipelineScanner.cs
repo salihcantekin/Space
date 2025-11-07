@@ -27,12 +27,12 @@ internal static class PipelineScanner
         return "object";
     }
 
-    private static (string, string) GetPipelineResponseType(AttributeData pipelineAttr, IMethodSymbol methodSymbol)
+    private static (string, string, bool) GetPipelineResponseType(AttributeData pipelineAttr, IMethodSymbol methodSymbol)
     {
         var taskName = methodSymbol.GetResponseTaskName();
         var respTypeName = methodSymbol.GetResponseGenericTypeName();
-
-        return (taskName, respTypeName);
+        bool voidLike = methodSymbol.ReturnType is INamedTypeSymbol r && (r.Name == SourceGenConstants.Type.Task || r.Name == SourceGenConstants.Type.ValueTask) && r.TypeArguments.Length == 0;
+        return (taskName, respTypeName, voidLike);
     }
 
 
@@ -58,7 +58,7 @@ internal static class PipelineScanner
         }
 
         var reqType = GetPipelineRequestType(methodSymbol);
-        var (taskName, respType) = GetPipelineResponseType(pipelineAttr, methodSymbol);
+        var (taskName, respType, voidLike) = GetPipelineResponseType(pipelineAttr, methodSymbol);
 
         yield return new PipelineCompileModel
         {
@@ -68,6 +68,7 @@ internal static class PipelineScanner
             ReturnTaskTypeName = taskName,
             RequestParameterTypeName = reqType,
             ReturnTypeName = respType,
+            IsVoidLike = voidLike,
             Order = order,
             Properties = pipelineAttr.GetProperties()
         };

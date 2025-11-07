@@ -292,6 +292,21 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         return AwaitDispose(vt.ContinueWithCast<TResponse>(), scope);
     }
 
+    // New non-generic overload (void-like): internally resolves Nothing response
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ValueTask Send(object request, string name = null, CancellationToken ct = default)
+    {
+        var vt = Send<Nothing>(request, name, ct);
+        if (vt.IsCompletedSuccessfully)
+            return new ValueTask();
+        return Await(vt);
+
+        static async ValueTask Await(ValueTask<Nothing> inner)
+        {
+            await inner.ConfigureAwait(false);
+        }
+    }
+
     private static Func<Space, object, CancellationToken, ValueTask<TRes>> BuildTypedDispatcher<TRes>(Type requestType, string name)
     {
         // If the runtime type is a reference type implementing IRequest<TRes>, use the typed generic send (by-value overload)

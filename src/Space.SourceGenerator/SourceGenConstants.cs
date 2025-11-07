@@ -23,12 +23,14 @@ namespace Space.SourceGenerator
         public const string HandleInvalidParameterTypeDiagnosticId = "HANDLE011";
         public const string HandleInvalidReturnTypeDiagnosticId = "HANDLE012";
         public const string HandleInvalidAccessibilityDiagnosticId = "HANDLE013";
+        public const string HandleVoidConflictDiagnosticId = "HANDLE014"; // void-like handler with non-Nothing IRequest<T>
 
         // Diagnostic messages for HandleAttributeRule
         public const string HandleInvalidParameterCountMessage = "Method with HandleAttribute must have exactly one parameter of type HandlerContext<TRequest>.";
         public const string HandleInvalidParameterTypeMessage = "Parameter must be HandlerContext<TRequest>.";
-        public const string HandleInvalidReturnTypeMessage = "Return type must be ValueTask<TResponse>.";
+        public const string HandleInvalidReturnTypeMessage = "Return type must be ValueTask<TResponse>, Task<TResponse>, ValueTask, or Task.";
         public const string HandleInvalidAccessibilityMessage = "Handle method must be public or internal.";
+        public const string HandleVoidConflictMessage = "Non-generic Task/ValueTask return can only be used when request does not implement IRequest<T> or implements IRequest<Nothing>.";
 
         public static class NameSpaces
         {

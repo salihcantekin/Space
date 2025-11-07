@@ -154,15 +154,15 @@ namespace Space.DependencyInjection
                 {{ for h in OrderedHandlers }}
                 {{ if (h.PipelineCompileModels.size == 0 && h.ModuleCompileModels.size == 0) }}
                 RegLight<{{ h.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}",
-                    (inst, ctx) => {{ if h.IsValueTask }} inst.{{ h.MethodName }}(ctx) {{ else }} SpaceGeneratorRuntimeHelpers.VT(inst.{{ h.MethodName }}(ctx)) {{ end }});
+                    (inst, ctx) => {{ if h.IsVoidLike }} SpaceGeneratorRuntimeHelpers.ToNothing(inst.{{ h.MethodName }}(ctx)) {{ else }} {{ if h.IsValueTask }} inst.{{ h.MethodName }}(ctx) {{ else }} SpaceGeneratorRuntimeHelpers.VT(inst.{{ h.MethodName }}(ctx)) {{ end }} {{ end }});
                 {{ else }}
                 Reg<{{ h.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}",
-                    (inst, ctx) => {{ if h.IsValueTask }} inst.{{ h.MethodName }}(ctx) {{ else }} SpaceGeneratorRuntimeHelpers.VT(inst.{{ h.MethodName }}(ctx)) {{ end }});
+                    (inst, ctx) => {{ if h.IsVoidLike }} SpaceGeneratorRuntimeHelpers.ToNothing(inst.{{ h.MethodName }}(ctx)) {{ else }} {{ if h.IsValueTask }} inst.{{ h.MethodName }}(ctx) {{ else }} SpaceGeneratorRuntimeHelpers.VT(inst.{{ h.MethodName }}(ctx)) {{ end }} {{ end }});
 
                     {{ for p in h.PipelineCompileModels }}
                     RegPipe<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}, {{ p.ClassFullName }}>("{{ h.HandlerName }}",
                         new PipelineConfig(){ Order = {{ p.Order }} },
-                        (pipe, ctx, next) => {{ if p.IsValueTask }} pipe.{{ p.MethodName }}(ctx, next) {{ else }} SpaceGeneratorRuntimeHelpers.VT(pipe.{{ p.MethodName }}(ctx, next)) {{ end }});
+                        (pipe, ctx, next) => {{ if p.IsVoidLike }} SpaceGeneratorRuntimeHelpers.ToNothing({{ if p.IsValueTask }} pipe.{{ p.MethodName }}(ctx, next).AsTask() {{ else }} pipe.{{ p.MethodName }}(ctx, next) {{ end }}) {{ else }} {{ if p.IsValueTask }} pipe.{{ p.MethodName }}(ctx, next) {{ else }} SpaceGeneratorRuntimeHelpers.VT(pipe.{{ p.MethodName }}(ctx, next)) {{ end }} {{ end }});
                     {{ end }}
 
                     {{ for m in h.ModuleCompileModels }}

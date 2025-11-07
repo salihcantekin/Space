@@ -1,243 +1,137 @@
-﻿Projenin Amacı
+﻿# Space Project Documentation (Legacy Plain Text)
 
-Bu projenin amacı MediatR kütüphanesinin bir benzerini inşa etmek. 
-Ancak daha önce MediatR ile ilgili hem performansı düşüren hem de kullanıcı
-deneyimini zorlaştıran bazı temel kullanım özelliklerini bu projede azaltma ve sonunda 
-tamamen ortadan kaldırmak üzere geliştirmeler yapmak, bu projenin ortaya çıkış hikayesidir.
-Özellikle Run-Time da reflection kullanımı MediatR ın en büyük eksikliğiydi. Bunun dışında
-IRequest<TReq,TRes> ve IRequestHander<TReq> gibi interface'lerin ve bunlar için ayrı ayrı
-modeller oluşturmak kullanıcılar açısından epey zahmetli ve uygulamanın kolayca büyümesinin
-önünü açan mediatR özellikleriydi. Bu proje içerisinde, Space, özellikle reflectiondan kurtulmak ve
-bunun yerine Source Generator özelliği kullanarak geliştirme yapmak performansı artırmak için
-en önemli yöntemlerden birisi. Diğeri ise Source Generator sayesinde artık Attribute'ler 
-kullanarak Handler'ların kolayca oluşturulabilmesi ve dolayısı ile aynı class içerisinde
-birbiri ile ilgili birden fazla Handler'ı barındırabilme kolaylığıdır. Ancak MediatR gibi
-işleri kolaylaştıran kütüphanelerin alternatifleri, özellikle source generator kullanarak, 
-çok kolay geliştirilemiyor. Buna rağmen Space kütüphanesi hem bugün MediatR dan hızlı çalışacak
-hem de daha sonra performansı ve kapasitesi geliştirilebilsin diye dinamik bir proje olarak
-hayatımıza girecek. Bunun en büyük örneği Modüllerdir. Sadece [Cache] Attribute'ünü ekleyerek bile
-istediğiniz Handler için bir Pipeline Modülü oluşturabiliyoruz. Daha sonra üzerinden
-değişiklik yapılabilsin diye de bu yapı modüler oluşturulmuştur. Ayrıca aynı Request-Response için birden
-fazla Handler'ınız varsa, Handle attribute'ünün Name parametresi ile buna bir isim verebilir ve Space.Send metodu
-içerisinden bu ismi belirterek istediğiniz Handler'ı çağırabilirsiniz.
+## Purpose
+The purpose of this project is to build a high-performance alternative to MediatR while reducing or eliminating runtime reflection and excessive boilerplate. Space uses a Roslyn Source Generator to discover handlers, pipelines, notifications, and modules at compile time and emit static registration code. This avoids runtime scanning and improves startup and dispatch performance.
 
+Key motivations:
+- Remove runtime reflection cost (a common performance drawback).
+- Reduce the need for multiple interface types per request/response pair.
+- Allow multiple related handlers to reside in the same class via attributes.
+- Provide an extensible module system (e.g., caching, auditing) as system pipelines.
+- Support named handlers so multiple strategies can coexist for a single request/response pair.
 
-## Yüklenmesi Gereken Nuget Paketleri ##
+## Required NuGet Packages
+Minimal usage:
+- Space.DependencyInjection (brings Space.Abstraction)
 
-Space.DependencyInjection
-Space.Abstractions
+Optional modules:
+- Space.Modules.InMemoryCache (caching)
+- Additional module packages in the future (audit, retry, etc.)
 
+## Dependency Injection
+```csharp
+var services = new ServiceCollection();
+services.AddSpace(opt =>
+{
+    opt.NotificationDispatchType = NotificationDispatchType.Parallel; // or Sequential
+});
+var provider = services.BuildServiceProvider();
+ISpace space = provider.GetRequiredService<ISpace>();
+```
 
-## Dependency Injection Metotları ##
+## Handler Implementation
+Handlers are methods annotated with `[Handle]`, accept `HandlerContext<TRequest>` and return `ValueTask<TResponse>` (or non-generic Task/ValueTask for `Nothing`).
+```csharp
+public sealed record UserLoginRequest(string UserName) : IRequest<UserLoginResponse>;
+public sealed record UserLoginResponse(bool Success);
 
-
-## Handler İmplementasyonu ##
-
-Handler'lar ISpace interface'i üzerinden Send<TResponse> metodu çağırılır. Bu metot bir parametre alır ve
-geriye ValueTask<TResponse> bir reponse döner. Asıl işi yapacak metot [Handle] attribute'ü
-ile işaretlenmiş ilgili parametreyi kabul eden ve beklenen response'u metotdur ve Space tarafından
-çağırılacaktır. IHandler<TRequest, TResponse> interface'ini kullanarak isterseniz, 
-metotların build-time da oluşturulmasını kolaylaştırabilirsiniz. (implement interface)
-
-
-public record UserLoginRequest(string UserName);
-public record UserLoginResponse(bool Success);
-
-public partial class UserHandlers
+public class UserHandlers
 {
     [Handle]
     public async ValueTask<UserLoginResponse> Login(HandlerContext<UserLoginRequest> ctx)
     {
-        var userService = ctx.ServiceProvider.GetService<UserService>();
-        var loginModel = ctx.Request;
-
-        //var userExists = await userService.Login(loginModel);
-        
-        return new UserLoginResponse() { Success = userExists };
+        // var userService = ctx.ServiceProvider.GetRequiredService<UserService>();
+        // bool exists = await userService.Login(ctx.Request);
+        bool exists = true; // demo
+        return new UserLoginResponse(exists);
     }
 }
 
-ISpace space = serviceProvider.GetRequiredService<ISpace>();
-var userLoginRequest = new UserLoginRequest() { Username = "sc" };
-var loginResponse = await space.Send<UserLoginResponse>(userLoginRequest);
-
-
-## Pipeline İmplementasyonu ##
-
-Space içerisindeki Pipeline'lar, ilgili Handle metotları için birer Middleware yapısıdır.
-Handler metotları çağırılmadan araya girerler ve süreci devam ettirirler. Space içerisindeki
-Pipeline'lar için de bir metot imzası bulunuyor. Yine Handle da olduğu gibi, imza için 
-interface'den yararlanılabilir (IPipelineHandler<TRequest, TResponse>)
-
-public partial class UserHandlers
+var response = await space.Send<UserLoginRequest, UserLoginResponse>(new UserLoginRequest("demo"));
+```
+Named handlers:
+```csharp
+public class PricingHandlers
 {
-    [Pipeline(Order = 1)] // Order parametresi opsiyoneldir
-    public async ValueTask<UserLoginResponse> PipelineHandler(PipelineContext<UserLoginRequest> ctx)
+    [Handle(Name = "Standard")] public ValueTask<PriceResult> Standard(HandlerContext<PriceQuery> ctx) => ValueTask.FromResult(new PriceResult("STD"));
+    [Handle(Name = "Discounted", IsDefault = true)] public ValueTask<PriceResult> Discounted(HandlerContext<PriceQuery> ctx) => ValueTask.FromResult(new PriceResult("DISC"));
+}
+// Unnamed dispatch uses IsDefault handler
+var discounted = await space.Send<PriceQuery, PriceResult>(new PriceQuery(5));
+var standard = await space.Send<PriceQuery, PriceResult>(new PriceQuery(6), name: "Standard");
+```
+
+## Pipelines
+Pipelines are middleware annotated with `[Pipeline]` and can be ordered via `Order`.
+```csharp
+public class UserPipelines
+{
+    [Pipeline(Order = 1)]
+    public async ValueTask<UserLoginResponse> Audit(PipelineContext<UserLoginRequest> ctx, PipelineDelegate<UserLoginRequest, UserLoginResponse> next)
     {
-        // Before
-
-        var response = await next(ctx);
-
+        // before
+        var res = await next(ctx);
         // after
-
-        return response;
+        return res;
     }
 }
+```
 
-
-
-
-## Notification İmplementasyonu ##
-
-Space içerisindeki Notification yapısı bir olay anında, ilgili olayı dinleyen
-consumer'lara kendisine verilen olay nesnesini iletmek için oluşturulmuştur. Space içerisindeki
-Publish metoduna gönderilen parametre, bu parametre imzasına sahip notification alıcılarına ulaştırılır.
-Bu ulaştırma işi, birden fazla alıcı olması durumunda, istenirse Paralel istenirse 
-sırayla çağırılabilir.
-
-services.AddSpace(opt =>
-{
-    opt.NotificationDispatchType = NotificationDispatchType.Parallel;
-});
-
-
-public record UserLoggedInSuccessfully(string UserName);
-
-public partial class UserHandlers
+## Notifications
+Notification handlers react to published events.
+```csharp
+public sealed record UserLoggedInSuccessfully(string UserName);
+public class LoginNotifications
 {
     [Notification]
-    public ValueTask LoginNotificationHandlerForFileLogging(NotificationContext<UserLoggedInSuccessfully> ctx)
-    {
-        // log details to file
-    }
-
+    public ValueTask LogFile(NotificationContext<UserLoggedInSuccessfully> ctx) => ValueTask.CompletedTask;
     [Notification]
-    public ValueTask LoginNotificationHandlerForDbLogging(NotificationContext<UserLoggedInSuccessfully> ctx)
-    {
-        // log details to db
-    }
+    public ValueTask LogDb(NotificationContext<UserLoggedInSuccessfully> ctx) => ValueTask.CompletedTask;
 }
+await space.Publish(new UserLoggedInSuccessfully("demo"));
+```
 
-ISpace space = serviceProvider.GetRequiredService<ISpace>();
-var @event = new UserLoggedInSuccessfully() { Username = "sc" };
-await space.Publish(@event);
-
-
-
-## Modül İmplementasyonu ##
-
-Space içerisindeki Modüller aslında önceden tanımlı operasyonları gerçekleştiren sistem pipeline'larıdır. Örneğin; Cache modünüz varsa,
-ilgili Handle metodu için bir Pipeline görevi görerek, Handle metodu çağırılmadan araya girip Cache işlemlerini yapar. Modüller de,
-diğer özellikler gibi Attribute kullanılarak sisteme eklenir. Ancak, bu attribute'lerin kendi metotları olmaz, Handle attribute'ü eklenmiş
-metotlara eklenir. Modüllerin sisteme eklenmesi için, her modülün kendi extension metodu olacaktır ve mutlaka sisteme eklenmelidir.
-
-Bunun dışında Space, sisteme Custom modüller eklenmesini de sağlayacaktır. Bugün itibariyle geliştirilme aşamasındadır ancak
-tamamlandığında örnek kullanımı aşağıdaki gibi olacaktır.
-
-public record UserDetail(string FullName, string EmailAddress);
-
-
-public partial class UserHandlers
+## Modules
+Modules (e.g. Cache) are added by attributing handlers with module attributes such as `[CacheModule]`. They inject system pipelines before user-defined pipelines.
+```csharp
+public class UserQueries
 {
     [Handle]
-    [Cache(Duration = 60)]
-    public ValueTask<List<UserDetail>> GetUserDetails(HandlerContext<int> ctx)
-    {
-        var userService = ctx.ServiceProvider.GetService<UserService>();
-
-        return userService.GetTopUsers(ctx.Request);
-    }
+    [CacheModule(Duration = 60)]
+    public ValueTask<UserProfile?> GetUser(HandlerContext<UserId> ctx) => ValueTask.FromResult<UserProfile?>(null);
 }
+```
 
+## Custom Module Concept
+A custom module involves:
+1. An attribute implementing `ISpaceModuleAttribute`.
+2. A `SpaceModule` subclass with `[SpaceModule(ModuleAttributeType = typeof(YourAttribute))]`.
+3. A config type implementing `IModuleConfig`.
+4. Optionally a provider type implementing a custom interface.
+5. An extension method to register module + provider.
 
+## Known Issues (Current)
+- Early lazy resolution edge case for `ISpace` may produce null space reference in extremely first handler instantiation path (subsequent calls correct this).
+- Module scoping for named handlers may apply module to all handlers of a request/response pair (refinement planned).
 
-services.AddSpaceInMemoryCache();
+## Planned Improvements
+- Attribute-level provider type specification (e.g. `[CacheModule(Provider = typeof(RedisCacheModuleProvider))]`).
+- Global default module option configuration via DI options pattern.
+- Enhanced module ordering constants and conflict diagnostics.
 
+## Suggestions / Future Work
+- Integrated structured logging via `ILoggerFactory`.
+- Expanded retry / audit / metrics modules.
 
+## Summary
+Space focuses on build-time computation (source generation) to deliver a lean, low-overhead runtime mediation and messaging framework featuring:
+- Attribute-first programming model
+- Extensible pipelines & modules
+- Named handler selection
+- High-performance async dispatch
+- No runtime reflection for discovery
 
-/*
-
-    Örnek Redis Cache İmplemetasyonu
-
-    services.AddSpaceCache(opt =>
-    {
-        opt.WithCacheModule(sp =>
-        {
-            return new RedisModuleProvider();
-        });
-
-        // opt.WithCacheModule<RedisModuleProvider>();
-    });
-
-    public sealed class RedisModuleProvider : ICacheModuleProvider
-    {
-        private readonly ConcurrentDictionary<string, object> valueStorage = [];
-
-        public  string GetKey<TRequest>(TRequest request)
-        {
-            return request?.ToString();
-        }
-
-        public  ValueTask Store<TResponse>(string key, TResponse response, CacheModuleConfig config)
-        {
-            valueStorage[key] = response;
-            return default;
-        }
-    
-        public  bool TryGet<TResponse>(string key, out TResponse response, CacheModuleConfig config)
-        {
-            response = default;
-
-            if (!valueStorage.TryGetValue(key, out var objResponse))
-                return false;
-
-            response = (TResponse)objResponse;
-            Log.Add("Data returned from Redis Cache");
-            return true;
-        }
-    }
-
-*/
-
-## Custom Modül İmplementasyonu ##
-
-Sisteme yeni eklenecek Modüller mutlaka yazılımcılar tarafından eklenmeli. Özellikle Sistem tarafından üretilen Modüller(pipelinelar)
-ile kullanıcı tarafından üretilen Pipeline'lar birbirinden ayrılmalı. Sistem Modüllerinin kendi sırası olmalı. Örneğin, Cache modülü
-için oluşturulan Pipeline, Handle için kullanıcı tarafından oluşturulan diğer pipeline'lardan önce çalışmalı. Ancak Audit gibi bir modül varsa
-bu da Cache den önce çalışmalı. Dolayısı ile oluşturulacak Modüllerin bazı özellikleri geliştirme aşamasında belirlenmeli. 
-Bunun dışında, yeni modül için uygulanması gereken bazı standartlar var. Bunun için Space.Modules.InMemoryCache klasörü altındaki Cache
-modülü incelenebilir. Modüllerin belli interface'lerden türemesi, hepsinin bir Config modeline sahip olması ve kullanıcıya bir extension
-metot sunması gibi zorunluluklar vardır. Bu interface'ler gerek Source Generator gerekse DI işlemleri sırasında sistemde kullanılacak
-modüllerin sisteme eklenmesi için kullanılacaktır ve hayati öneme sahiptir.
-
-
-## Bilinen Hatalar ##
-- ISpace ve SpaceRegistry içerisinde Circular Dependency sorunu için, 
-  ISpace(Lazy) instance'ı ilk Handler içerisine null olarak gidiyor. 
-  Sonraki istekte set ediliyor, ve sonrasında Context içerisindeki Space, değere sahip oluyor.
-
-- Handler Name kullanılarak oluşturulan birden fazla metotlardan birinde olan Modüller hepsine otomatik olarak ekleniyor.
-  Sadece attribute olan handler için eklenmeli.
-
-
-
-
-## Planlanan Geliştirmeler ##
-
-- Modül attribute'leri Custom Modül parametresi kabul edebilmeli. 
-  Örn; [Cache(Provider = typeof(RedisCacheProvider))]
-
-- Modüllerin parametreleri uygulama bazında Varsayılan değerler alabilmeli
-  Örn; services.AddCache(opt => opt.Duration = TimeSpan.FromHours(1));
-
-- Modül Config'leri sisteme Option pattern ile eklensin ki modül provider'ı içerisinden erişilebilsin.
-
-
-
-## Öneriler ##
-
-- Notification.Publish DispatchType alabilsin.
-- LoggerFactory ile loglama yapılabilme
+For full, updated documentation prefer the Markdown files under `docs/` (e.g., `ProjectDoc.en.md`). This legacy plain text file is retained for compatibility.
 
 
 

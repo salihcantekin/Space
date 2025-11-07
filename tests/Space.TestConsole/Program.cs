@@ -70,7 +70,8 @@ var command = new UserCreateCommand() { Email = "salihcantekin@gmail.com", Name 
 //    _ = await space.Send<UserCreateResponse>(command);
 //}
 
-var res = await space.Send<UserCreateResponse>(command);
+//var res = await space.Send<UserCreateResponse>(command);
+await space.Send(5);
 
 
 
@@ -86,14 +87,27 @@ Log.Add("DONE!");
 public class TestHandler
 : IHandler<UserCreateCommand, UserCreateResponse>
 {
-    //[Handle(Name = "NothingHandle")]
+    [Handle(Name = "NothingHandle")]
     //[CacheModule(Duration = 5)]
-    //public ValueTask<Nothing> Handle(HandlerContext<int> ctx)
-    //{
-    //    var randomNumber = dataService.GetRandomNumber();
-    //    Log.Add($"   [TestHandler.NothingHandle] Processing Id: {ctx.Request}, Number: {randomNumber}");
-    //    return Nothing.ValueTask;
-    //}
+    public ValueTask Handle(HandlerContext<int> ctx)
+    {
+        return new ValueTask();
+    }
+
+    [Pipeline(Order = 1)]
+    public async ValueTask HandlePipeline(PipelineContext<int> ctx, PipelineDelegate<int, Nothing> next)
+    {
+        Log.Add($"   [HandlePipeline1] Processing Id: {ctx.Request} BEFORE");
+
+        var val = await next(ctx);
+
+        Log.Add($"   [HandlePipeline1] Processing Id: {ctx.Request} AFTER");
+
+        //return val;
+    }
+
+
+
 
     private int counter = 0;
 
