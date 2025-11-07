@@ -31,8 +31,9 @@ var loginResponse = await space.Send<UserLoginRequest, UserLoginResponse>(new Us
 Additional overloads:
 - IRequest overload: `await space.Send<UserLoginResponse>(IRequest<UserLoginResponse> request, string? name = null)`
 - Object overload: `await space.Send<UserLoginResponse>(object request, string? name = null)`
+- Void-like (non-generic) convenience: `await space.Send(object request, string? name = null)` -> internally `Send<Nothing>`
 
-> Rule: In `Send<TRequest, TResponse>`, `TRequest` must implement `IRequest<TResponse>`. This is enforced at compile time.
+> Rule: In `Send<TRequest, TResponse>`, `TRequest` must implement `IRequest<TResponse>`. This is enforced at compile time unless you intentionally dispatch with different concrete types via object overload.
 
 Handlers can be named using the `Name` parameter and invoked by name:
 ```csharp
@@ -69,3 +70,26 @@ var r2 = await space.Send<PriceQuery, PriceResult>(new PriceQuery(2), name: "Sta
 Rules:
 - Only one handler per (Request, Response) pair can be marked `IsDefault = true`. The source generator emits a diagnostic if more than one is found.
 - If no handler is marked as default, the last discovered handler remains the fallback for unnamed sends.
+
+## Void-like Handlers (Non-generic Task/ValueTask)
+If a handler returns non-generic `Task` or `ValueTask`, Space normalizes the result to `Nothing` automatically.
+
+```csharp
+public record CreateOp(string Tag) : IRequest<Nothing>;
+
+public class CreateHandlers
+{
+    [Handle]
+    public ValueTask Perform(HandlerContext<CreateOp> ctx) => ValueTask.CompletedTask; // -> ValueTask<Nothing>
+
+    [Handle(Name = "Alt")]
+    public Task PerformAlt(HandlerContext<CreateOp> ctx) => Task.CompletedTask;        // -> Task<Nothing>
+}
+
+await space.Send<CreateOp, Nothing>(new CreateOp("x"));
+await space.Send(new CreateOp("y"), name: "Alt"); // non-generic Send
+```
+
+Diagnostic rule `HANDLE014` prevents using non-generic return when `TRequest : IRequest<TNonNothing>`.
+
+See `VoidLikeHandlers.md` for deeper details.

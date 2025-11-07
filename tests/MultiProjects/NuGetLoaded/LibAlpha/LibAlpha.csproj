@@ -5,7 +5,7 @@
 
 		<!-- When true we use local project references so the repo build is not broken. Set /p:UseLocalSpaceProjects=false to test NuGet packages -->
 		<!--<UseLocalSpaceProjects Condition="'$(UseLocalSpaceProjects)'==''">true</UseLocalSpaceProjects>-->
-		<UseLocalSpaceProjects>true</UseLocalSpaceProjects>
+		<UseLocalSpaceProjects>false</UseLocalSpaceProjects>
 		<SpaceGenerateRootAggregator>false</SpaceGenerateRootAggregator>
 	</PropertyGroup>
 
@@ -20,6 +20,6 @@
 
 	<ItemGroup Condition="'$(UseLocalSpaceProjects)'!='true'">
 		<!-- Replace version with the package version you want to test -->
-		<PackageReference Include="Space.DependencyInjection" Version="0.0.7-local" />
+		<PackageReference Include="Space.DependencyInjection" Version="2.0.0-preview" />
 	</ItemGroup>
 </Project>

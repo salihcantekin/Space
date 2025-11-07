@@ -14,6 +14,25 @@ public static class SpaceGeneratorRuntimeHelpers
     public static ValueTask<T> VT<T>(Task<T> task)
         => task.Status == TaskStatus.RanToCompletion ? new ValueTask<T>(task.Result) : new ValueTask<T>(task);
 
+    // Adapt non-generic Task/ValueTask to ValueTask<Nothing>
+    public static ValueTask<Nothing> ToNothing(ValueTask task)
+        => task.IsCompleted ? Nothing.ValueTask : Await(task);
+
+    public static ValueTask<Nothing> ToNothing(Task task)
+        => task.IsCompleted ? Nothing.ValueTask : Await(task);
+
+    private static async ValueTask<Nothing> Await(ValueTask task)
+    {
+        await task.ConfigureAwait(false);
+        return Nothing.Value;
+    }
+
+    private static async ValueTask<Nothing> Await(Task task)
+    {
+        await task.ConfigureAwait(false);
+        return Nothing.Value;
+    }
+
     // Thread-static lightweight HandlerContext reuse for light handlers.
     internal static class LightInvokerState<TReq, THandler, TRes>
     {

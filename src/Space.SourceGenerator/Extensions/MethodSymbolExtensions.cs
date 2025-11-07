@@ -67,7 +67,7 @@ public static class MethodSymbolExtensions
                     : namedType.TypeArguments.First().Name;
         }
 
-        return "Nothing";
+        return "global::Space.Abstraction.Nothing";
     }
 
     public static string GetResponseTaskName(this IMethodSymbol methodSymbol)

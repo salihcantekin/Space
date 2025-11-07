@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       release:
-        description: 'Release version (vX.Y.Z or X.Y.Z). Leave empty to use latest release tag'
+        description: 'Release version (vX.Y.Z or X.Y.Z or vX.Y.Z-preview)'
         required: false
         type: string
       prerelease:
@@ -70,22 +70,30 @@ jobs:
             exit 1
           fi
 
-          # Normalize possible inputs (e.g., refs/tags/v1.0.0, v1.0.0, 1.0.0)
+          # Normalize possible inputs (e.g., refs/tags/v1.0.0, v1.0.0, 1.0.0, v1.0.0-preview)
           TAG=$(echo -n "$SRC_TAG" | tr -d '[:space:]')
           TAG=${TAG#refs/tags/}
           TAG=${TAG#tags/}
-          # Strip a single leading v or V
+          # Strip a single leading v or V for base evaluation, preserve preview suffix if present
           if [[ "$TAG" =~ ^[vV]([0-9].*)$ ]]; then
             BASE_VERSION="${BASH_REMATCH[1]}"
           else
             BASE_VERSION="$TAG"
           fi
+
           # Basic SemVer (allow pre-release/build metadata)
           if [[ ! "$BASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+].*)?$ ]]; then
             echo "Input '$SRC_TAG' produced invalid base version '$BASE_VERSION'. Expected '1.2.3' or 'v1.2.3'." >&2
             exit 1
           fi
-          PREVIEW_VERSION="${BASE_VERSION}-preview"
+
+          # If already has -preview (or any pre-release ending with preview), do not append another suffix
+          if [[ "$BASE_VERSION" == *preview* ]]; then
+            PREVIEW_VERSION="$BASE_VERSION"
+          else
+            PREVIEW_VERSION="${BASE_VERSION}-preview"
+          fi
+
           echo "Using preview version: $PREVIEW_VERSION (source: $SRC_TAG)"
           echo "VERSION=$PREVIEW_VERSION" >> $GITHUB_ENV
 

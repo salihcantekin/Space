@@ -41,6 +41,26 @@ public class MyPipeline : IPipelineHandler<MyRequest, MyResponse>
 }
 ```
 
+## Void-like pipelines (non-generic Task/ValueTask)
+Space supports pipelines that return non-generic `Task`/`ValueTask`. These are normalized to `Nothing` internally and can be used only when they target handlers whose response is `Nothing`.
+
+- For named pipelines (`[Pipeline("handlerName")]`), a new diagnostic `PIPELINE014` is emitted if any handler registered under that name returns a non-`Nothing` response type.
+- For global pipelines (no handle name), the generator matches by `(TRequest, TResponse)` so nothing special is required; void-like pipelines will only attach to `Nothing` response handlers.
+
+```csharp
+public record Create(string Name) : IRequest<Nothing>;
+
+public class CreationPipelines
+{
+    [Pipeline(Order = 100)]
+    public ValueTask Log(PipelineContext<Create> ctx, PipelineDelegate<Create, Nothing> next)
+    {
+        // before
+        return next(ctx); // normalized to ValueTask<Nothing>
+    }
+}
+```
+
 ## Sharing data across pipelines with PipelineContext.Items
 `PipelineContext<TRequest>` provides a lightweight item bag accessible by all pipelines in the same execution chain via `SetItem` and `GetItem`.
 

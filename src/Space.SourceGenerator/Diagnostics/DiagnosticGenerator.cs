@@ -19,8 +19,10 @@ internal class DiagnosticGenerator
         new MissingNotificationAttributeRule(),
         new NotificationAttributeRule(),
 
+        // Pipeline rules
         new MissingPipelineAttributeRule(),
-        new PipelineAttributeRule()
+        new PipelineAttributeRule(),
+        new PipelineVoidConflictRule(),
         // SEND001 disabled for now (kept in code for future use)
         // new SendGenericResponseMismatchRule()
     ];
