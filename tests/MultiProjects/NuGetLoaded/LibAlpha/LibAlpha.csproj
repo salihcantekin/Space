@@ -7,19 +7,17 @@
 		<!--<UseLocalSpaceProjects Condition="'$(UseLocalSpaceProjects)'==''">true</UseLocalSpaceProjects>-->
 		<UseLocalSpaceProjects>false</UseLocalSpaceProjects>
 		<SpaceGenerateRootAggregator>false</SpaceGenerateRootAggregator>
+
+		<!--<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+		<CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>-->
 	</PropertyGroup>
 
 	<ItemGroup Condition="'$(UseLocalSpaceProjects)'=='true'">
 		<!-- corrected relative paths (go up 4 levels to solution root) -->
 		<ProjectReference Include="../../../../src/Space.Abstraction/Space.Abstraction.csproj" />
-		<ProjectReference Include="../../../../src/Space.DependencyInjection/Space.DependencyInjection.csproj" />
-		<ProjectReference Include="../../../../src/Space.SourceGenerator/Space.SourceGenerator.csproj"
-						  OutputItemType="Analyzer"
-						  ReferenceOutputAssembly="false"/>
 	</ItemGroup>
 
 	<ItemGroup Condition="'$(UseLocalSpaceProjects)'!='true'">
-		<!-- Replace version with the package version you want to test -->
-		<PackageReference Include="Space.DependencyInjection" Version="2.0.0-preview" />
+		<PackageReference Include="Space.Abstraction" Version="2.0.0" />
 	</ItemGroup>
 </Project>

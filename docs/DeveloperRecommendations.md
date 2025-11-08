@@ -1,5 +1,6 @@
 # Developer Recommendations
 
+- Always reference both `Space.Abstraction` (brings analyzer) and `Space.DependencyInjection` (runtime DI) unless you only need compile-time generation without provided DI.
 - Use `Notification.Publish` with configurable `DispatchType` for flexible event handling.
 - Integrate with `LoggerFactory` for advanced logging.
 - Follow interface and config standards when implementing custom modules.
@@ -13,4 +14,4 @@
 - Benchmarks: run `tests/Space.Benchmarks` to compare typed/IRequest/object Send paths.
 - Always run `dotnet format` before committing.
 
-For more, see [ProjectDoc.txt](ProjectDoc.txt).
+For more, see [ProjectDoc.en.md](ProjectDoc.en.md) and [KnownIssues.md](KnownIssues.md).
