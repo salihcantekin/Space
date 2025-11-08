@@ -11,8 +11,8 @@
 		<CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>-->
 	</PropertyGroup>
 	<ItemGroup>
-		<PackageReference Include="Space.Abstraction" Version="0.0.8-local" />
-		<PackageReference Include="Space.DependencyInjection" Version="0.0.8-local" />
+		<PackageReference Include="Space.Abstraction" Version="2.0.0" />
+		<PackageReference Include="Space.DependencyInjection" Version="2.0.0" />
 	</ItemGroup>
 
 	<ItemGroup>

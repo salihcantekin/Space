@@ -18,6 +18,6 @@
 	</ItemGroup>
 
 	<ItemGroup Condition="'$(UseLocalSpaceProjects)'!='true'">
-		<PackageReference Include="Space.Abstraction" Version="0.0.8-local" />
+		<PackageReference Include="Space.Abstraction" Version="2.0.0" />
 	</ItemGroup>
 </Project>
