@@ -7,7 +7,13 @@
 		<!-- Mark this as root so source generator aggregates satellite libraries -->
 		<SpaceGenerateRootAggregator>true</SpaceGenerateRootAggregator>
 
+		<!--<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+		<CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>-->
 	</PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="Space.Abstraction" Version="0.0.8-local" />
+		<PackageReference Include="Space.DependencyInjection" Version="0.0.8-local" />
+	</ItemGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="../LibAlpha/LibAlpha.csproj" />

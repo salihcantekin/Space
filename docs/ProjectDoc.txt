@@ -11,8 +11,9 @@ Key motivations:
 - Support named handlers so multiple strategies can coexist for a single request/response pair.
 
 ## Required NuGet Packages
-Minimal usage:
-- Space.DependencyInjection (brings Space.Abstraction)
+Minimal usage now requires referencing both:
+- Space.Abstraction (brings the Space.SourceGenerator analyzer automatically)
+- Space.DependencyInjection (DI extensions and runtime implementations)
 
 Optional modules:
 - Space.Modules.InMemoryCache (caching)
@@ -132,6 +133,8 @@ Space focuses on build-time computation (source generation) to deliver a lean, l
 - No runtime reflection for discovery
 
 For full, updated documentation prefer the Markdown files under `docs/` (e.g., `ProjectDoc.en.md`). This legacy plain text file is retained for compatibility.
+
+
 
 
 
