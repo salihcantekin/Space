@@ -16,6 +16,7 @@
 		<IncludeBuildOutput>true</IncludeBuildOutput>
 		<PackageIcon>icon.png</PackageIcon>
 		<AssemblyName>Space.Abstraction</AssemblyName>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
 	</PropertyGroup>
 
 	<ItemGroup>
