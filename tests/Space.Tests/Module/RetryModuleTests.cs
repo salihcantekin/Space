@@ -129,7 +129,7 @@ public class RetryModuleTests
 
         RetryHandlersDev.Reset();
         var space = sp.GetRequiredService<ISpace>();
-        
+
         await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
         {
             await space.Send<RetryReq, RetryRes>(new RetryReq(FailTimes: failTimes), name: "RetryDev");

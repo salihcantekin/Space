@@ -127,6 +127,46 @@ public class UserQueries
 `[CacheModule]` (from Space.Modules.InMemoryCache) inserts caching logic before user pipelines.
 
 ---
+## Multi-Project Setup
+
+Space supports handlers, pipelines, notifications, and modules across multiple projects through a **root aggregator** model. This enables modular solutions where feature libraries can contain their own handlers without manual DI wiring.
+
+### Configuration
+
+Set exactly **one** project as the root aggregator (typically your host/composition root):
+
+```xml
+<PropertyGroup>
+  <SpaceGenerateRootAggregator>true</SpaceGenerateRootAggregator>
+</PropertyGroup>
+```
+
+All other handler libraries should either omit this property or set it to `false`:
+
+```xml
+<PropertyGroup>
+  <SpaceGenerateRootAggregator>false</SpaceGenerateRootAggregator>
+</PropertyGroup>
+```
+
+### How It Works
+
+- **Root project** generates `DependencyInjectionExtensions.g.cs` with automatic assembly discovery
+- **Satellite libraries** generate lightweight `SpaceAssemblyRegistration_<Assembly>.g.cs` files
+- At runtime, the root automatically discovers and registers handlers from all referenced assemblies
+
+### Example Structure
+```
+/MySolution
+  src/AppHost/               (root: SpaceGenerateRootAggregator=true)
+  src/Features/Users/        (satellite: handlers, pipelines)
+  src/Features/Billing/      (satellite: handlers, modules)
+  src/Infrastructure/        (satellite: notifications)
+```
+
+For complete details, migration guidance, and troubleshooting, see [MultiProjectSetup.md](docs/MultiProjectSetup.md).
+
+---
 ## Key Features
 - Zero runtime reflection for discovery (Roslyn source generator)
 - Minimal boilerplate: annotate methods directly with `[Handle]`, `[Pipeline]`, `[Notification]`
@@ -158,6 +198,7 @@ Primary docs in `docs/`:
 | Pipelines | [Pipelines](docs/Pipelines.md) |
 | Notifications | [Notifications](docs/Notifications.md) |
 | Modules | [Modules](docs/Modules.md) |
+| Multi-Project Setup | [MultiProjectSetup](docs/MultiProjectSetup.md) |
 | Developer Recommendations | [DeveloperRecommendations](docs/DeveloperRecommendations.md) |
 | Known Issues | [KnownIssues](docs/KnownIssues.md) |
 | Planned Improvements | [PlannedImprovements](docs/PlannedImprovements.md) |
