@@ -43,7 +43,7 @@
 		<ProjectReference Include="..\Space.SourceGenerator\Space.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 	</ItemGroup>
 
-	<Target Name="BuildSourceGeneratorBeforePack" BeforeTargets="Pack">
+	<Target Name="BuildSourceGeneratorBeforePack" BeforeTargets="Pack" Condition="'$(NoBuild)' != 'true'">
 		<MSBuild Projects="..\Space.SourceGenerator\Space.SourceGenerator.csproj" Targets="Build" Properties="Configuration=$(Configuration)" />
 	</Target>
 
