@@ -29,4 +29,8 @@ public interface ISpace
     [EditorBrowsable(EditorBrowsableState.Always)]
     ValueTask<TResponse> Send<TResponse>(object request, string name = null, CancellationToken ct = default)
         where TResponse : notnull;
+
+    // New: fire-and-forget semantic that still flows through handlers returning Nothing
+    [EditorBrowsable(EditorBrowsableState.Always)]
+    ValueTask Send(object request, string name = null, CancellationToken ct = default);
 }

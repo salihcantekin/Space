@@ -2,29 +2,31 @@
 
 	<PropertyGroup>
 		<TargetFramework>netstandard2.0</TargetFramework>
-		<RootNamespace>Space.Abstraction</RootNamespace>
 		<LangVersion>latest</LangVersion>
 		<!-- NuGet package metadata -->
 		<PackageId>Space.Abstraction</PackageId>
 		<Authors>salihcantekin</Authors>
 		<Company>Space</Company>
-		<Description>Abstractions for the Space framework, including core interfaces, attributes, and modular pipeline contracts for high-performance .NET applications.</Description>
-		<PackageTags>abstraction;space;mediator;pipeline;modular;dotnet</PackageTags>
+		<Description>Core abstractions (interfaces, attributes, contracts) for the Space framework. Automatically includes the Space.SourceGenerator analyzer for compile-time registration.</Description>
+		<PackageTags>abstraction;space;mediator;pipeline;modular;dotnet;analyzer;sourcegenerator</PackageTags>
 		<RepositoryUrl>https://github.com/salihcantekin/Space</RepositoryUrl>
 		<PackageProjectUrl>https://github.com/salihcantekin/Space</PackageProjectUrl>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
 		<IncludeBuildOutput>true</IncludeBuildOutput>
 		<PackageIcon>icon.png</PackageIcon>
+		<AssemblyName>Space.Abstraction</AssemblyName>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<None Include="icon.png" Pack="true" PackagePath="" />
+		<!-- Pack analyzer dll from built Space.SourceGenerator project -->
+		<None Include="..\Space.SourceGenerator\bin\$(Configuration)\netstandard2.0\Space.SourceGenerator.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" Condition="Exists('..\Space.SourceGenerator\bin\$(Configuration)\netstandard2.0\Space.SourceGenerator.dll')" />
 	</ItemGroup>
 
 	<PropertyGroup Condition="'$(Configuration)'=='Debug'">
-		<Version>0.0.6-local</Version>
-		<InformationalVersion>0.0.6-local+$(SourceRevisionId)</InformationalVersion>
+		<Version>0.0.8-local</Version>
+		<InformationalVersion>0.0.8-local+$(SourceRevisionId)</InformationalVersion>
 		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
 	</PropertyGroup>
 
@@ -33,5 +35,13 @@
 		<PackageReference Include="Microsoft.Extensions.ObjectPool" Version="10.0.0-preview.7.25380.108" />
 		<PackageReference Include="System.Threading.Tasks.Extensions" Version="4.5.4" />
 	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Space.SourceGenerator\Space.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+	</ItemGroup>
+
+	<Target Name="BuildSourceGeneratorBeforePack" BeforeTargets="Pack">
+		<MSBuild Projects="..\Space.SourceGenerator\Space.SourceGenerator.csproj" Targets="Build" Properties="Configuration=$(Configuration)" />
+	</Target>
 
 </Project>

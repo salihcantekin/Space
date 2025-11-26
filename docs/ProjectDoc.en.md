@@ -1,21 +1,34 @@
 # Space Project Documentation (English)
 
 ## 1. Purpose
-The goal of this project is to build a high?performance alternative to MediatR while removing / minimizing several usability and performance drawbacks:
-- Eliminate runtime reflection (a major MediatR cost) by using a Source Generator for compile?time discovery & registration.
+The goal of this project is to build a high-performance alternative to MediatR while removing / minimizing several usability and performance drawbacks:
+- Eliminate runtime reflection (a major MediatR cost) by using a source generator for compile-time discovery & registration.
 - Reduce interface & model boilerplate (no need for separate IRequest / IRequestHandler pairs per request unless you prefer helper interfaces).
-- Allow multiple related handlers to co?exist in a single class via simple attributes.
+- Allow multiple related handlers to co-exist in a single class via simple attributes.
 - Introduce an extensible Module system (e.g. Caching) implemented as system pipelines that run before user pipelines.
 - Support named handlers so multiple handlers for the same Request/Response can be selected explicitly at Send time.
-- NEW (Breaking Change): First-class multi-project handler discovery via a single root aggregator + per-assembly lightweight registration (see `MultiProjectSetup.md`).
+- Multi-project handler discovery via a single root aggregator + per-assembly lightweight registration (see `MultiProjectSetup.md`).
 
 ## 2. Required NuGet Packages
-Core usage requires referencing:
-- `Space.DependencyInjection` (brings registration extensions & analyzer)
-- `Space.Abstraction`
+Core usage requires referencing BOTH packages explicitly:
+- `Space.Abstraction` (automatically includes the Space.SourceGenerator analyzer; install this and you get compile-time registration)
+- `Space.DependencyInjection` (runtime DI extensions + implementations of ISpace and registries)
+
+Explicit requirement for multi-project solutions:
+- Root aggregator project (the one with `<SpaceGenerateRootAggregator>true</SpaceGenerateRootAggregator>`) MUST reference BOTH `Space.Abstraction` and `Space.DependencyInjection`.
+- Satellite class libraries that only declare handlers/pipelines/notifications SHOULD reference `Space.Abstraction` (to bring the analyzer). They typically do NOT need `Space.DependencyInjection`.
 
 Optional modules (examples):
 - `Space.Modules.InMemoryCache`
+
+> Previous versions auto-brought abstractions via `Space.DependencyInjection`. This changed so any project that uses attributes (even without DI) can get source generation by referencing `Space.Abstraction` alone.
+
+### Breaking change (packaging)
+- Old: `Space.DependencyInjection` brought abstractions + analyzer implicitly.
+- New: `Space.Abstraction` brings the analyzer. `Space.DependencyInjection` provides runtime DI only.
+- Migration:
+  - If you referenced only `Space.DependencyInjection`, add `Space.Abstraction` to every project that uses Space attributes.
+  - Remove any explicit `Space.SourceGenerator` project/NuGet references; they are no longer necessary when `Space.Abstraction` is present.
 
 ## 3. Dependency Injection
 ```csharp
@@ -31,18 +44,28 @@ var provider = services.BuildServiceProvider();
 ISpace space = provider.GetRequiredService<ISpace>();
 ```
 
-### 3.1 Multi-Project Root Aggregator Configuration (NEW)
+### 3.1 Multi-Project Root Aggregator Configuration
 Add to exactly ONE project (host / composition root):
 ```xml
 <PropertyGroup>
   <SpaceGenerateRootAggregator>true</SpaceGenerateRootAggregator>
 </PropertyGroup>
 ```
-All other handler libraries should either omit the property or set it to false:
+And ensure the root aggregator project references BOTH packages:
+```xml
+<ItemGroup>
+  <PackageReference Include="Space.Abstraction" Version="X.Y.Z" />
+  <PackageReference Include="Space.DependencyInjection" Version="X.Y.Z" />
+</ItemGroup>
+```
+All other handler libraries should either omit the property or set it to false and reference only `Space.Abstraction`:
 ```xml
 <PropertyGroup>
   <SpaceGenerateRootAggregator>false</SpaceGenerateRootAggregator>
 </PropertyGroup>
+<ItemGroup>
+  <PackageReference Include="Space.Abstraction" Version="X.Y.Z" />
+</ItemGroup>
 ```
 See `MultiProjectSetup.md` for full rationale and migration guidance.
 
@@ -59,7 +82,6 @@ public class UserHandlers
     {
         var userService = ctx.ServiceProvider.GetService<UserService>();
         var loginModel = ctx.Request;
-        // var userExists = await userService.Login(loginModel);
         bool userExists = true; // demo
         return new UserLoginResponse(userExists);
     }
@@ -85,12 +107,10 @@ Pipelines are middleware around handlers.
 ```csharp
 public class UserPipelines
 {
-    [Pipeline(Order = 1)] // Order is optional
+    [Pipeline(Order = 1)]
     public async ValueTask<UserLoginResponse> PipelineHandler(PipelineContext<UserLoginRequest> ctx, PipelineDelegate<UserLoginRequest, UserLoginResponse> next)
     {
-        // Before
         var response = await next(ctx);
-        // After
         return response;
     }
 }
@@ -111,20 +131,18 @@ public class UserHandlersNotifications
 {
     [Notification]
     public ValueTask LoginNotificationHandlerForFileLogging(NotificationContext<UserLoggedInSuccessfully> ctx)
-    { /* log to file */ return ValueTask.CompletedTask; }
+    { return ValueTask.CompletedTask; }
 
     [Notification]
     public ValueTask LoginNotificationHandlerForDbLogging(NotificationContext<UserLoggedInSuccessfully> ctx)
-    { /* log to DB */ return ValueTask.CompletedTask; }
+    { return ValueTask.CompletedTask; }
 }
 
 await space.Publish(new UserLoggedInSuccessfully("sc"));
 ```
 
 ## 7. Modules (System Pipelines)
-Modules are system-provided pipeline layers triggered by decorating a handler method with a module attribute. Example: caching.
-
-> NOTE: The attribute name in code is currently `CacheModuleAttribute` (use `[CacheModule(...)]`). Older docs might show `[Cache]`.
+Modules are system-provided pipeline layers triggered by decorating a handler method with a module attribute.
 
 ```csharp
 public sealed record UserDetail(string FullName, string EmailAddress);
@@ -132,7 +150,7 @@ public sealed record UserDetail(string FullName, string EmailAddress);
 public class UserHandlers
 {
     [Handle]
-    [CacheModule(Duration = 60)] // seconds
+    [CacheModule(Duration = 60)]
     public ValueTask<List<UserDetail>> GetUserDetails(HandlerContext<int> ctx)
     {
         var userService = ctx.ServiceProvider.GetService<UserService>();
@@ -142,7 +160,7 @@ public class UserHandlers
 
 services.AddSpaceInMemoryCache();
 ```
-### Custom (Concept) Redis Provider
+### Custom Redis Provider (Concept)
 ```csharp
 public sealed class RedisCacheModuleProvider : ICacheModuleProvider
 {
@@ -158,56 +176,36 @@ Register it instead of the default in-memory provider.
 
 ## 8. Custom Module Implementation Guidelines
 When adding a new module:
-1. Create an attribute implementing `ISpaceModuleAttribute` (e.g. `[AuditModule]`).
-2. Create a `SpaceModule` subclass decorated with `[SpaceModule(ModuleAttributeType = typeof(AuditModuleAttribute))]`.
+1. Create an attribute implementing `ISpaceModuleAttribute`.
+2. Create a `SpaceModule` subclass decorated with `[SpaceModule(ModuleAttributeType = typeof(YourModuleAttribute))]`.
 3. Provide a config model implementing `IModuleConfig`.
-4. Provide a provider implementing `IModuleProvider` (and custom interfaces if needed, e.g. `IAuditModuleProvider`).
-5. Offer an extension method to register provider/config (e.g. `AddSpaceAudit`).
-6. Pick a `PipelineOrder` relative to other system modules (e.g. Audit before Cache, both before user pipelines).
-
-Module attributes do not define their own methods; they annotate existing `[Handle]` methods.
+4. Provide a provider implementing `IModuleProvider`.
+5. Offer an extension method to register provider/config.
+6. Pick a `PipelineOrder` relative to other system modules.
 
 ## 9. Known Issues
-- `ISpace` & `SpaceRegistry` circular dependency: the lazy `ISpace` may be null in the very first handler instance; populated on subsequent requests.
-- If multiple handlers share the same request/response and only one has a module attribute, the module may still apply to all (scoping bug to refine).
+- `ISpace` & `SpaceRegistry` circular dependency (first handler may see null lazy ISpace).
+- Module scoping for named handlers still being refined.
 
 ## 10. Planned Improvements
-- Allow specifying provider type directly on module attributes: `[CacheModule(Provider = typeof(RedisCacheModuleProvider))]`.
-- Global default module parameter configuration: `services.AddCache(opt => opt.Duration = TimeSpan.FromHours(1));`
-- Register module configs via the Options pattern so providers can access application-wide defaults.
+- Attribute-level provider specification.
+- Global default module configuration.
+- Options pattern for module configs.
 
 ## 11. Suggestions (Future)
-- Integrate `ILoggerFactory` for built-in logging across pipelines/modules.
+- Integrate `ILoggerFactory` for built-in logging.
 
 ## 12. Summary
-Space provides a lean, attribute & source-generator driven approach to mediator patterns with extensible, modular cross-cutting pipelines and zero runtime reflection registration cost.
+Space provides a lean, attribute & source-generator driven mediator approach with extensible modules and zero runtime reflection registration cost.
 
 ## 13. Versioning & Releases
-This repository uses GitHub Releases to drive NuGet publishing. No packages are published on branch pushes.
-
-- Stable release (prod publish):
-  - Create a GitHub Release and DO NOT mark it as "pre-release".
-  - Tag format: either `vX.Y.Z` or `X.Y.Z` (a single leading `v` is ignored).
-  - The Prod workflow builds, tests, packs, and publishes packages with version `X.Y.Z`.
-
-- Preview release (dev publish):
-  - Create a GitHub Release and mark it as "pre-release".
-  - Tag format: `vX.Y.Z` or `X.Y.Z`.
-  - The Dev workflow builds, tests, packs, and publishes packages with version `X.Y.Z-preview`.
-
-- Validation CI:
-  - Feature branches (`feature/*`, `features/*`) run build/test validation on push.
-  - Pull requests into `dev` or `master` run validation as well.
-
-- Version parsing details:
-  - A single leading `v`/`V` is trimmed (e.g., `v1.2.3` -> `1.2.3`).
-  - Basic SemVer validation is performed. Pre-release/build metadata are supported.
-
-- Local development:
-  - Debug builds use a local version like `0.0.0-local` to avoid colliding with published packages.
+Uses GitHub Releases for publish.
+- Stable: normal release (`vX.Y.Z`)
+- Preview: pre-release (`vX.Y.Z-preview`)
+- Validation: branch/PR build
 
 ## 14. Multi-Project Setup Reference
-See `MultiProjectSetup.md` for detailed migration & configuration guidance for the new root aggregator model.
+See `MultiProjectSetup.md`.
 
 ## License
 MIT

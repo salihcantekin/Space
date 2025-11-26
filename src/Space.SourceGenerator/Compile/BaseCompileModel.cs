@@ -16,4 +16,6 @@ public record BaseCompileModel
     public string ReturnTypeName { get; set; }
 
     public string ReturnTaskTypeName { get; set; }
+
+    public bool IsVoidLike { get; set; }
 }

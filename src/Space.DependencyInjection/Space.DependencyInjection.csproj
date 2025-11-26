@@ -7,8 +7,8 @@
 		<PackageId>Space.DependencyInjection</PackageId>
 		<Authors>salihcantekin</Authors>
 		<Company>Space</Company>
-		<Description>Dependency Injection extensions for the Space framework. Automatically brings in the Space source generator analyzer for compile-time registration.</Description>
-		<PackageTags>dependencyinjection;space;sourcegenerator;analyzer;dotnet</PackageTags>
+		<Description>Dependency Injection extensions and runtime implementations for the Space framework.</Description>
+		<PackageTags>dependencyinjection;space;dotnet</PackageTags>
 		<RepositoryUrl>https://github.com/salihcantekin/Space</RepositoryUrl>
 		<PackageProjectUrl>https://github.com/salihcantekin/Space</PackageProjectUrl>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -22,15 +22,14 @@
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)'=='Debug'">
-		<Version>0.0.7-local</Version>
-		<InformationalVersion>0.0.7-local+$(SourceRevisionId)</InformationalVersion>
+		<Version>0.0.8-local</Version>
+		<InformationalVersion>0.0.8-local+$(SourceRevisionId)</InformationalVersion>
 		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<None Include="icon.png" Pack="true" PackagePath="" />
 		<None Include="README.md" Pack="true" PackagePath="" />
-		<None Include="..\Space.SourceGenerator\bin\$(Configuration)\netstandard2.0\Space.SourceGenerator.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" Condition="Exists('..\Space.SourceGenerator\bin\$(Configuration)\netstandard2.0\Space.SourceGenerator.dll')" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -42,9 +41,5 @@
 	<ItemGroup>
 		<ProjectReference Include="..\Space.Abstraction\Space.Abstraction.csproj" />
 	</ItemGroup>
-
-	<Target Name="BuildSourceGeneratorBeforePack" BeforeTargets="Pack">
-		<MSBuild Projects="..\Space.SourceGenerator\Space.SourceGenerator.csproj" Targets="Build" Properties="Configuration=$(Configuration)" />
-	</Target>
 
 </Project>

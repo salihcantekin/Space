@@ -150,9 +150,9 @@ public static class ServiceCollectionExtensions
 
         object[] callArgs = parameters.Length switch
         {
-            1 => new object[] { services },
-            2 when allowConfigure => new object[] { services, configure },
-            _ => new object[] { services }
+            1 => [services],
+            2 when allowConfigure => [services, configure],
+            _ => [services]
         };
 
         method.Invoke(null, callArgs);
@@ -168,9 +168,15 @@ public static class ServiceCollectionExtensions
                 {
                     var ps = m.GetParameters();
 
-                    if (ps.Length == 0) return false;
-                    if (!typeof(IServiceCollection).IsAssignableFrom(ps[0].ParameterType)) return false;
-                    if (ps.Length == 2 && !allowConfigure) return false;
+                    if (ps.Length == 0) 
+                        return false;
+                    
+                    if (!typeof(IServiceCollection).IsAssignableFrom(ps[0].ParameterType)) 
+                        return false;
+
+                    if (ps.Length == 2 && !allowConfigure) 
+                        return false;
+
                     return true;
                 });
     }
@@ -222,11 +228,14 @@ public static class ServiceCollectionExtensions
 
     private static void PreloadUserAssemblies()
     {
-        if (userAssembliesPreloaded) return;
+        if (userAssembliesPreloaded) 
+            return;
+
         userAssembliesPreloaded = true;
 
         var entry = Assembly.GetEntryAssembly();
-        if (entry == null) return;
+        if (entry == null) 
+            return;
 
         var skipPrefixes = new string[] { "System", "Microsoft", "mscorlib", "netstandard", "Windows" };
 
@@ -236,10 +245,7 @@ public static class ServiceCollectionExtensions
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
         {
             var simple = asm.GetName().Name;
-            if (!loaded.ContainsKey(simple))
-            {
-                loaded.Add(simple, asm);
-            }
+            loaded.TryAdd(simple, asm);
         }
 
         var q = new Queue<AssemblyName>(entry.GetReferencedAssemblies());
@@ -248,8 +254,13 @@ public static class ServiceCollectionExtensions
         {
             var an = q.Dequeue();
             var name = an.Name;
-            if (loaded.ContainsKey(name)) continue;
-            if (skipPrefixes.Any(p => name.StartsWith(p, StringComparison.Ordinal))) continue;
+
+            if (loaded.ContainsKey(name)) 
+                continue;
+
+            if (skipPrefixes.Any(p => name.StartsWith(p, StringComparison.Ordinal))) 
+                continue;
+
             try
             {
                 var asm = Assembly.Load(an);
@@ -272,14 +283,29 @@ public static class ServiceCollectionExtensions
     #region Utilities
     private static IEnumerable<Type> SafeGetTypes(Assembly assembly)
     {
-        try { return assembly.GetTypes(); }
-        catch (ReflectionTypeLoadException ex) { return ex.Types.Where(t => t is not null)!; }
-        catch { return Array.Empty<Type>(); }
+        try 
+        { 
+            return assembly.GetTypes(); 
+        }
+        catch (ReflectionTypeLoadException ex) 
+        { 
+            return ex.Types.Where(t => t is not null)!; 
+        }
+        catch 
+        { 
+            return []; 
+        }
     }
 
     private static void TryLoad(Action load)
     {
-        try { load(); } catch { }
+        try 
+        { 
+            load(); 
+        }
+        catch 
+        {
+        }
     }
     #endregion
 

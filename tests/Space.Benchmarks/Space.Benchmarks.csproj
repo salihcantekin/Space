@@ -29,7 +29,6 @@
 	<ItemGroup>
 		<ProjectReference Include="..\..\src\Space.Abstraction\Space.Abstraction.csproj" />
 		<ProjectReference Include="..\..\src\Space.DependencyInjection\Space.DependencyInjection.csproj" />
-		<ProjectReference Include="..\..\src\Space.SourceGenerator\Space.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 	</ItemGroup>
 
 	<ItemGroup>

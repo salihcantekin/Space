@@ -4,12 +4,15 @@ using Space.SourceGenerator.Compile;
 using System.Linq;
 
 namespace Space.SourceGenerator.Diagnostics.Rules;
-// This rule checks for methods with HandleAttribute and validates their signature.
+// Updated rule: allow Task<T>, ValueTask<T>, Task, ValueTask. Non-generic maps to Nothing.
 public class HandleAttributeRule : IDiagnosticRule
 {
     public bool Analyze(SourceProductionContext context, Compilation compilation, HandlersCompileWrapperModel _)
     {
         bool hasErrors = false;
+
+        var iRequestSymbol = compilation.GetTypeByMetadataName("Space.Abstraction.Contracts.IRequest`1");
+        var nothingSymbol = compilation.GetTypeByMetadataName("Space.Abstraction.Nothing");
 
         foreach (var tree in compilation.SyntaxTrees)
         {
@@ -50,12 +53,33 @@ public class HandleAttributeRule : IDiagnosticRule
                         continue;
                     }
 
-                    // Rule 3: Return type must be ValueTask<TResponse>
-                    if (methodSymbol.ReturnType is not INamedTypeSymbol returnType || (returnType.Name != SourceGenConstants.Type.ValueTask && returnType.Name != SourceGenConstants.Type.Task) || returnType.TypeArguments.Length != 1)
+                    // Rule 3: Return type must be Task/ValueTask (generic optional)
+                    if (methodSymbol.ReturnType is not INamedTypeSymbol returnType || (returnType.Name != SourceGenConstants.Type.ValueTask && returnType.Name != SourceGenConstants.Type.Task))
                     {
                         ReportDiagnostic(context, methodNode, SourceGenConstants.HandleInvalidReturnTypeDiagnosticId, SourceGenConstants.HandleInvalidReturnTypeMessage);
                         hasErrors = true;
                         continue;
+                    }
+
+                    bool isGeneric = returnType.TypeArguments.Length == 1;
+
+                    if (!isGeneric)
+                    {
+                        // Non-generic Task/ValueTask treated as Nothing. Validate IRequest<T> compatibility.
+                        // Extract TRequest from HandlerContext<TRequest>
+                        var requestType = paramType.TypeArguments[0];
+                        var iReq = requestType.AllInterfaces.FirstOrDefault(i => iRequestSymbol != null && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iRequestSymbol));
+
+                        if (iReq != null)
+                        {
+                            var configuredResponse = iReq.TypeArguments[0];
+                            if (nothingSymbol == null || !SymbolEqualityComparer.Default.Equals(configuredResponse, nothingSymbol))
+                            {
+                                ReportDiagnostic(context, methodNode, SourceGenConstants.HandleVoidConflictDiagnosticId, SourceGenConstants.HandleVoidConflictMessage);
+                                hasErrors = true;
+                                continue;
+                            }
+                        }
                     }
 
                     // Rule 4: Method must be public or internal

@@ -15,23 +15,39 @@ High-performance, source-generator powered mediator / messaging framework for .N
 
 | Package | Stable | Preview | Downloads | Description |
 |---------|--------|---------|-----------|-------------|
-| Space.Abstraction | ![NuGet](https://img.shields.io/nuget/v/Space.Abstraction.svg) | ![NuGet (pre)](https://img.shields.io/nuget/vpre/Space.Abstraction.svg) | ![Downloads](https://img.shields.io/nuget/dt/Space.Abstraction.svg) | Core abstractions: attributes, contexts, contracts |
-| Space.DependencyInjection | ![NuGet](https://img.shields.io/nuget/v/Space.DependencyInjection.svg) | ![NuGet (pre)](https://img.shields.io/nuget/vpre/Space.DependencyInjection.svg) | ![Downloads](https://img.shields.io/nuget/dt/Space.DependencyInjection.svg) | DI extensions + source generator bootstrap |
+| Space.Abstraction | ![NuGet](https://img.shields.io/nuget/v/Space.Abstraction.svg) | ![NuGet (pre)](https://img.shields.io/nuget/vpre/Space.Abstraction.svg) | ![Downloads](https://img.shields.io/nuget/dt/Space.Abstraction.svg) | Core abstractions + Source Generator analyzer (attributes, contexts, contracts) |
+| Space.DependencyInjection | ![NuGet](https://img.shields.io/nuget/v/Space.DependencyInjection.svg) | ![NuGet (pre)](https://img.shields.io/nuget/vpre/Space.DependencyInjection.svg) | ![Downloads](https://img.shields.io/nuget/dt/Space.DependencyInjection.svg) | DI extensions & runtime implementations (ISpace) |
 | [Space.Modules.InMemoryCache](https://github.com/salihcantekin/Space.Modules.InMemoryCache) | ![NuGet](https://img.shields.io/nuget/v/Space.Modules.InMemoryCache.svg) | ![NuGet (pre)](https://img.shields.io/nuget/vpre/Space.Modules.InMemoryCache.svg) | ![Downloads](https://img.shields.io/nuget/dt/Space.Modules.InMemoryCache.svg) | In-memory caching module + attribute integration |
 
-### Install (Minimal)
+### Breaking Change (Packaging)
+Old behavior: `Space.DependencyInjection` implicitly brought abstractions + source generator.
+New behavior: Source generator analyzer ships with `Space.Abstraction`. You must reference BOTH packages for full DI usage.
+
+Migration:
+1. Add `Space.Abstraction` to all projects that use Space attributes.
+2. Add `Space.DependencyInjection` only where you need `ISpace` and registration extensions.
+3. Remove any direct `Space.SourceGenerator` references; they are now unnecessary.
+
+### Install (Minimal DI Usage)
 ```bash
-dotnet add package Space.DependencyInjection (brings Space.Abstraction)
+dotnet add package Space.Abstraction
+
+dotnet add package Space.DependencyInjection
 ```
 Optional module:
 ```bash
 dotnet add package Space.Modules.InMemoryCache
 ```
+If you only need compile-time generation (e.g., custom runtime) reference just `Space.Abstraction`.
 
 ---
 ## Quick Start
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
+using Space.Abstraction;
+using Space.Abstraction.Attributes;
+using Space.Abstraction.Context;
+using Space.Abstraction.Contracts;
 
 var services = new ServiceCollection();
 services.AddSpace(opt =>
@@ -44,11 +60,7 @@ services.AddSpaceInMemoryCache(); // if caching module needed
 var provider = services.BuildServiceProvider();
 var space = provider.GetRequiredService<ISpace>();
 
-public sealed record UserLoginRequest(string UserName);
-/*
-The response type can be defined using IRequest<T>.
-*/
-public sealed record UserLoginRequest(string UserName) : IRequest<UserLoginResponse>
+public sealed record UserLoginRequest(string UserName) : IRequest<UserLoginResponse>;
 public sealed record UserLoginResponse(bool Success);
 
 public class UserHandlers
@@ -58,22 +70,15 @@ public class UserHandlers
         => ValueTask.FromResult(new UserLoginResponse(true));
 }
 
- /*
- The same functionality can be implemented using the IHandler<UserLoginRequest,  UserLoginResponse> interface.
- The primary difference from the attribute-based approach is that the method name will be explicitly defined in the interface implementation.
-*/
-
-public class UserHandlers : IHandler<UserLoginRequest, UserLoginResponse>
+// Interface-based alternative
+public class UserHandlersInterface : IHandler<UserLoginRequest, UserLoginResponse>
 {
-    public ValueTask<UserLoginResponse> Handle  (UserLoginRequest request, CancellationToken  cancellationToken)
-        => ValueTask.FromResult(new UserLoginResponse   (true));
+    public ValueTask<UserLoginResponse> Handle(UserLoginRequest request, CancellationToken cancellationToken)
+        => ValueTask.FromResult(new UserLoginResponse(true));
 }
 
-var response = await space.Send<UserLoginResponse>(new UserLoginRequest("demo"));
-/*
-A more efficient solution can be achieved in the Send method by utilizing both the request and response types.
-*/
-var response = await space.Send<UserLoginRequest, UserLoginResponse>(new UserLoginRequest("demo"))
+var response1 = await space.Send<UserLoginResponse>(new UserLoginRequest("demo"));
+var response2 = await space.Send<UserLoginRequest, UserLoginResponse>(new UserLoginRequest("demo"));
 ```
 
 ### Named Handlers
@@ -83,7 +88,7 @@ public class PricingHandlers
     [Handle(Name = "Default")] public ValueTask<PriceResult> GetDefault(HandlerContext<PriceQuery> ctx) => ...;
     [Handle(Name = "Discounted")] public ValueTask<PriceResult> GetDiscounted(HandlerContext<PriceQuery> ctx) => ...;
 }
-var discounted = await space.Send<PriceResult>(new PriceQuery(...), handlerName: "Discounted");
+var discounted = await space.Send<PriceResult>(new PriceQuery(...), name: "Discounted");
 ```
 
 ### Pipelines
@@ -91,11 +96,9 @@ var discounted = await space.Send<PriceResult>(new PriceQuery(...), handlerName:
 public class LoggingPipeline
 {
     [Pipeline(Order = 100)]
-    public async ValueTask<TResponse> Log<TRequest, TResponse>(PipelineContext<TRequest> ctx)
+    public async ValueTask<UserLoginResponse> Log(PipelineContext<UserLoginRequest> ctx, PipelineDelegate<UserLoginRequest, UserLoginResponse> next)
     {
-        // pre-execution 
-        var result = await ctx.Next(ctx);
-        // post-execution
+        var result = await next(ctx);
         return result;
     }
 }
@@ -117,7 +120,7 @@ await space.Publish(new UserLoggedIn("demo"));
 public class UserQueries
 {
     [Handle]
-    [CacheModule(DurationSeconds = 60)]
+    [CacheModule(Duration = 60)]
     public ValueTask<UserProfile?> GetUser(HandlerContext<UserId> ctx) => ...;
 }
 ```
@@ -172,6 +175,7 @@ For complete details, migration guidance, and troubleshooting, see [MultiProject
 - Extensible module model (e.g., cache) before user pipelines
 - High-performance async signatures (`ValueTask`)
 - Parallel or sequential notification dispatch
+- Multi-project root aggregator property `<SpaceGenerateRootAggregator>`
 - Multi-targeting (netstandard2.0 + modern .NET)
 
 ---
@@ -181,7 +185,7 @@ Space front-loads cost at build time to reduce runtime overhead:
 - No reflection-based runtime scanning
 - Low allocation pathways (current & planned pooling)
 
-Benchmarks (planned) will compare against other mediator libraries.
+Benchmarks compare against other mediator libraries in `tests/Space.Benchmarks`.
 
 ---
 ## Documentation
@@ -207,14 +211,14 @@ Per-package:
 ## Roadmap & Issues
 See GitHub Issues for:
 - Planned improvements (attribute parameters, global defaults, Options pattern)
-- Known issues (initial Lazy `ISpace` null, module scoping on named handlers)
+- Known issues (initial Lazy `ISpace` null, module scoping bugs)
 
 Contributions welcome via issues & PRs.
 
 ---
 ## Versioning & Releases
 - `master`: tagged semantic versions (`vX.Y.Z`) ? stable NuGet
-- `dev`: continuous preview (`X.Y.(Patch+1)-preview.<run>`)
+- `dev`: preview releases (`X.Y.Z-preview`)
 - Feature branches: validation build only
 
 ---
@@ -224,4 +228,27 @@ MIT.
 ---
 ## Disclaimer
 APIs may evolve while early preview features stabilize. Track releases for changes.
+
+---
+# Space (Short)
+
+Space is a high-performance, source-generator powered mediator/messaging framework for .NET.
+
+- Docs: see the `docs/` folder
+- Contribution guide for modules: see [docs/Contribution.md](docs/Contribution.md)
+
+## Quick links
+- Handlers: docs/Handlers.md
+- Pipelines: docs/Pipelines.md
+- Notifications: docs/Notifications.md
+- Known Issues: docs/KnownIssues.md
+- Developer Recommendations: docs/DeveloperRecommendations.md
+
+## Build
+See `.github/copilot-instructions.md` for environment and common commands.
+
+
+
+
+
 
