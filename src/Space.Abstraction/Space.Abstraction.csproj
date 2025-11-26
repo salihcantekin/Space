@@ -20,8 +20,8 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<None Include="icon.png" Pack="true" PackagePath="" />
-		<None Include="README.md" Pack="true" PackagePath="" />
+		<None Include="icon.png" Pack="true" PackagePath="\" />
+		<None Include="README.md" Pack="true" PackagePath="\" />
 		<!-- Pack analyzer dll from built Space.SourceGenerator project -->
 		<None Include="..\Space.SourceGenerator\bin\$(Configuration)\netstandard2.0\Space.SourceGenerator.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" Condition="Exists('..\Space.SourceGenerator\bin\$(Configuration)\netstandard2.0\Space.SourceGenerator.dll')" />
 	</ItemGroup>
