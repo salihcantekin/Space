@@ -70,10 +70,11 @@ public class UserHandlers
         => ValueTask.FromResult(new UserLoginResponse(true));
 }
 
-// Interface-based alternative
+// Interface-based (optional, for method signature hint only - [Handle] attribute is still required)
 public class UserHandlersInterface : IHandler<UserLoginRequest, UserLoginResponse>
 {
-    public ValueTask<UserLoginResponse> Handle(UserLoginRequest request, CancellationToken cancellationToken)
+    [Handle]
+    public ValueTask<UserLoginResponse> Handle(HandlerContext<UserLoginRequest> ctx)
         => ValueTask.FromResult(new UserLoginResponse(true));
 }
 

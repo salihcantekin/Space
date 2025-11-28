@@ -89,7 +89,7 @@ public class UserHandlers
 
 var loginResponse = await space.Send<UserLoginResponse>(new UserLoginRequest("sc"));
 ```
-You may optionally implement helper interfaces (e.g. `IHandler<TReq,TRes>`) if the project provides them, but attributes are sufficient.
+You may optionally implement helper interfaces (e.g. `IHandler<TReq,TRes>`) for type safety hints, but the `[Handle]` attribute is mandatory for handler discovery. The interface alone does not register the handler.
 
 ### Named Handlers
 Provide multiple handlers for same Request/Response:

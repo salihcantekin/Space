@@ -31,7 +31,7 @@ ISpace space = provider.GetRequiredService<ISpace>();
 ```
 
 ## Handler Implementation
-Handlers are methods annotated with `[Handle]`, accept `HandlerContext<TRequest>` and return `ValueTask<TResponse>` (or non-generic Task/ValueTask for `Nothing`).
+Handlers are methods annotated with `[Handle]`, accept `HandlerContext<TRequest>` and return `ValueTask<TResponse>` (or non-generic Task/ValueTask for `Nothing`). The `[Handle]` attribute is mandatory for the source generator to discover handlers. The optional `IHandler<TRequest, TResponse>` interface can be implemented for type safety hints, but does not register the handler on its own.
 ```csharp
 public sealed record UserLoginRequest(string UserName) : IRequest<UserLoginResponse>;
 public sealed record UserLoginResponse(bool Success);
