@@ -31,11 +31,11 @@ public partial class UserHandlers
 }
 ```
 
-You can implement pipeline interfaces for type safety and build-time validation:
+You can implement pipeline interfaces for type safety and build-time validation. Note that the `[Pipeline]` attribute is still required for the source generator to discover and register the pipeline:
 ```csharp
 public class MyPipeline : IPipelineHandler<MyRequest, MyResponse>
-    where MyRequest : IRequest<MyResponse>
 {
+    [Pipeline(Order = 1)]
     public ValueTask<MyResponse> HandlePipeline(PipelineContext<MyRequest> ctx, PipelineDelegate<MyRequest, MyResponse> next)
         => next(ctx);
 }

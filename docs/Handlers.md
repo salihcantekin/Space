@@ -2,6 +2,8 @@
 
 Handlers in Space are methods marked with the `[Handle]` attribute. They process requests and return responses asynchronously. Handlers can be grouped in classes and can use attribute parameters for naming and modular configuration.
 
+> **Important:** The `[Handle]` attribute is mandatory for handler discovery by the source generator. The optional `IHandler<TRequest, TResponse>` interface can be implemented for type safety hints, but does not register the handler on its own.
+
 > Multi-Project Note: If handlers live in multiple class libraries, ensure exactly one project sets `<SpaceGenerateRootAggregator>true</SpaceGenerateRootAggregator>` so that all satellite libraries' handlers are discovered. See `MultiProjectSetup.md`.
 
 ## Example
