@@ -6,6 +6,8 @@ public record HandlersCompileModel(string HandlerName) : BaseCompileModel
 {
     public PipelineCompileModel[] PipelineCompileModels { get; set; } = [];
 
+    public GlobalPipelineCompileModel[] GlobalPipelineCompileModels { get; set; } = [];
+
     public ModuleCompileModel[] ModuleCompileModels { get; set; } = [];
 
     // New: mark handler as default for its Req/Res pair

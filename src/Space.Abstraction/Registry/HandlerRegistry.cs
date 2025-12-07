@@ -11,8 +11,10 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
 {
     private Dictionary<(Type, string, Type), object> handlerMap = [];
     private Dictionary<(Type, Type), object> handlerMapByType = [];
+    private Dictionary<(Type, Type), List<GlobalPipelineContainer>> globalPipelineMap = [];
     private ReadOnlyDictionary<(Type, string, Type), object> readOnlyHandlerMap;
     private ReadOnlyDictionary<(Type, Type), object> readOnlyHandlerMapByType;
+    private ReadOnlyDictionary<(Type, Type), List<GlobalPipelineContainer>> readOnlyGlobalPipelineMap;
     private bool isSealed = false;
     private ISpace space;
 
@@ -20,6 +22,17 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
 
     // New: lifetime from SpaceRegistry to choose specialized entries
     public ServiceLifetime HandlerLifetime { get; set; } = ServiceLifetime.Scoped;
+
+    private sealed class GlobalPipelineContainer
+    {
+        internal GlobalPipelineConfig Config { get; }
+        internal object Invoker { get; } // PipelineInvoker<TRequest, TResponse>
+        internal GlobalPipelineContainer(GlobalPipelineConfig config, object invoker)
+        {
+            Config = config;
+            Invoker = invoker;
+        }
+    }
 
     public void RegisterHandler<TRequest, TResponse>(
         HandlerInvoker<TRequest, TResponse> invoker,
@@ -34,16 +47,19 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
 
         var key = SpaceRegistry.GenerateKey<TRequest, TResponse>(name);
 
+        // Gather global pipelines for this (TRequest, TResponse) pair
+        var globalPipelines = GetGlobalPipelinesForType<TRequest, TResponse>();
+
         object entryObj;
         // Choose specialized handler entry based on lifetime
         if (HandlerLifetime == ServiceLifetime.Singleton)
         {
-            entryObj = new SpaceRegistry.SingletonHandlerEntry<TRequest, TResponse>(invoker, lightInvoker, pipelines);
+            entryObj = new SpaceRegistry.SingletonHandlerEntry<TRequest, TResponse>(invoker, lightInvoker, pipelines, globalPipelines);
         }
         else
         {
             // Transient and Scoped use the generic/scoped-safe entry
-            entryObj = new SpaceRegistry.ScopedHandlerEntry<TRequest, TResponse>(invoker, lightInvoker, pipelines);
+            entryObj = new SpaceRegistry.ScopedHandlerEntry<TRequest, TResponse>(invoker, lightInvoker, pipelines, globalPipelines);
         }
 
         handlerMap[key] = entryObj;
@@ -70,16 +86,47 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
         }
     }
 
+    public void RegisterGlobalPipeline<TRequest, TResponse>(GlobalPipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)
+    {
+        if (isSealed)
+        {
+            throw new InvalidOperationException("Registration is sealed. No more global pipelines can be registered.");
+        }
+
+        var typeKey = (typeof(TRequest), typeof(TResponse));
+        if (!globalPipelineMap.TryGetValue(typeKey, out var list))
+        {
+            list = [];
+            globalPipelineMap[typeKey] = list;
+        }
+
+        list.Add(new GlobalPipelineContainer(config, invoker));
+    }
+
+    private IEnumerable<(GlobalPipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> GetGlobalPipelinesForType<TRequest, TResponse>()
+    {
+        var typeKey = (typeof(TRequest), typeof(TResponse));
+        if (globalPipelineMap.TryGetValue(typeKey, out var list))
+        {
+            foreach (var gp in list)
+            {
+                yield return (gp.Config, (PipelineInvoker<TRequest, TResponse>)gp.Invoker);
+            }
+        }
+    }
+
     public void CompleteRegistration()
     {
         if (!isSealed)
         {
             readOnlyHandlerMap = new ReadOnlyDictionary<(Type, string, Type), object>(handlerMap);
             readOnlyHandlerMapByType = new ReadOnlyDictionary<(Type, Type), object>(handlerMapByType);
+            readOnlyGlobalPipelineMap = new ReadOnlyDictionary<(Type, Type), List<GlobalPipelineContainer>>(globalPipelineMap);
             isSealed = true;
 
             handlerMap = null;
             handlerMapByType = null;
+            globalPipelineMap = null;
         }
     }
 

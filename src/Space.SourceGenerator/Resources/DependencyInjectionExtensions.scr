@@ -119,6 +119,26 @@ namespace Space.DependencyInjection
                 }
                 {{ end }}
 
+                {{ if NeedsRegGlobalPipeline }}
+                void RegGlobalPipeline<TReq, TRes, TGlobalPipe>(GlobalPipelineConfig cfg, Func<TGlobalPipe, PipelineContext<TReq>, PipelineDelegate<TReq, TRes>, ValueTask<TRes>> invoker)
+                {
+                    if (isSingleton)
+                    {
+                        // Cache global pipeline instance once for singleton lifetime to avoid per-call DI resolution
+                        var gpInstance = sp.GetRequiredService<TGlobalPipe>();
+                        registry.RegisterGlobalPipeline<TReq, TRes>(cfg, (ctx, next) => invoker(gpInstance, ctx, next));
+                    }
+                    else
+                    {
+                        registry.RegisterGlobalPipeline<TReq, TRes>(cfg, (ctx, next) =>
+                        {
+                            var gp = ctx.ServiceProvider.GetRequiredService<TGlobalPipe>();
+                            return invoker(gp, ctx, next);
+                        });
+                    }
+                }
+                {{ end }}
+
                 {{ if NeedsRegModule }}
                 void RegModule<TReq, TRes>(string handlerName, string moduleName, string profileName)
                 {
@@ -150,25 +170,33 @@ namespace Space.DependencyInjection
                 RegNotification<{{ n.RequestParameterTypeName }}, {{ n.ClassFullName }}>((inst, ctx) => inst.{{ n.MethodName }}(ctx));
                 {{ end }}
 
-                // Root assembly handlers / pipelines / modules
+                // Root assembly handlers / pipelines / modules / global pipelines
                 {{ for h in OrderedHandlers }}
-                {{ if (h.PipelineCompileModels.size == 0 && h.ModuleCompileModels.size == 0) }}
+                {{   if (h.PipelineCompileModels.size == 0 && h.ModuleCompileModels.size == 0 && h.GlobalPipelineCompileModels.size == 0 && StandaloneGlobalPipelines.size == 0) }}
                 RegLight<{{ h.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}",
-                    (inst, ctx) => {{ if h.IsVoidLike }} SpaceGeneratorRuntimeHelpers.ToNothing(inst.{{ h.MethodName }}(ctx)) {{ else }} {{ if h.IsValueTask }} inst.{{ h.MethodName }}(ctx) {{ else }} SpaceGeneratorRuntimeHelpers.VT(inst.{{ h.MethodName }}(ctx)) {{ end }} {{ end }});
-                {{ else }}
+                    (inst, ctx) => {{ if h.IsVoidLike }}SpaceGeneratorRuntimeHelpers.ToNothing(inst.{{ h.MethodName }}(ctx)){{ else }}{{ if h.IsValueTask }}inst.{{ h.MethodName }}(ctx){{ else }}SpaceGeneratorRuntimeHelpers.VT(inst.{{ h.MethodName }}(ctx)){{ end }}{{ end }});
+                {{   else }}
+                {{     for sgp in StandaloneGlobalPipelines }}
+                RegGlobalPipeline<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}, {{ sgp.ClassFullName }}>(
+                    new GlobalPipelineConfig(){ Order = {{ sgp.Order }}, ExecutionStage = {{ sgp.ExecutionStage }} },
+                    (gpipe, ctx, next) => {{ if sgp.IsVoidLike }}SpaceGeneratorRuntimeHelpers.ToNothing({{ if sgp.IsValueTask }}{{ if sgp.IsGeneric }}gpipe.{{ sgp.MethodName }}<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>(ctx, next).AsTask(){{ else }}gpipe.{{ sgp.MethodName }}(ctx, next).AsTask(){{ end }}{{ else }}{{ if sgp.IsGeneric }}gpipe.{{ sgp.MethodName }}<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>(ctx, next){{ else }}gpipe.{{ sgp.MethodName }}(ctx, next){{ end }}{{ end }}){{ else }}{{ if sgp.IsValueTask }}{{ if sgp.IsGeneric }}gpipe.{{ sgp.MethodName }}<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>(ctx, next){{ else }}gpipe.{{ sgp.MethodName }}(ctx, next){{ end }}{{ else }}SpaceGeneratorRuntimeHelpers.VT({{ if sgp.IsGeneric }}gpipe.{{ sgp.MethodName }}<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>(ctx, next){{ else }}gpipe.{{ sgp.MethodName }}(ctx, next){{ end }}){{ end }}{{ end }});
+                {{     end }}
                 Reg<{{ h.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}",
-                    (inst, ctx) => {{ if h.IsVoidLike }} SpaceGeneratorRuntimeHelpers.ToNothing(inst.{{ h.MethodName }}(ctx)) {{ else }} {{ if h.IsValueTask }} inst.{{ h.MethodName }}(ctx) {{ else }} SpaceGeneratorRuntimeHelpers.VT(inst.{{ h.MethodName }}(ctx)) {{ end }} {{ end }});
-
-                    {{ for p in h.PipelineCompileModels }}
-                    RegPipe<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}, {{ p.ClassFullName }}>("{{ h.HandlerName }}",
-                        new PipelineConfig(){ Order = {{ p.Order }} },
-                        (pipe, ctx, next) => {{ if p.IsVoidLike }} SpaceGeneratorRuntimeHelpers.ToNothing({{ if p.IsValueTask }} pipe.{{ p.MethodName }}(ctx, next).AsTask() {{ else }} pipe.{{ p.MethodName }}(ctx, next) {{ end }}) {{ else }} {{ if p.IsValueTask }} pipe.{{ p.MethodName }}(ctx, next) {{ else }} SpaceGeneratorRuntimeHelpers.VT(pipe.{{ p.MethodName }}(ctx, next)) {{ end }} {{ end }});
-                    {{ end }}
-
-                    {{ for m in h.ModuleCompileModels }}
-                    RegModule<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}", "{{ m.ModuleName }}", "{{m.Profile}}");
-                    {{ end }}
-                {{ end }}
+                    (inst, ctx) => {{ if h.IsVoidLike }}SpaceGeneratorRuntimeHelpers.ToNothing(inst.{{ h.MethodName }}(ctx)){{ else }}{{ if h.IsValueTask }}inst.{{ h.MethodName }}(ctx){{ else }}SpaceGeneratorRuntimeHelpers.VT(inst.{{ h.MethodName }}(ctx)){{ end }}{{ end }});
+                {{     for p in h.PipelineCompileModels }}
+                RegPipe<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}, {{ p.ClassFullName }}>("{{ h.HandlerName }}",
+                    new PipelineConfig(){ Order = {{ p.Order }} },
+                    (pipe, ctx, next) => {{ if p.IsVoidLike }}SpaceGeneratorRuntimeHelpers.ToNothing({{ if p.IsValueTask }}pipe.{{ p.MethodName }}(ctx, next).AsTask(){{ else }}pipe.{{ p.MethodName }}(ctx, next){{ end }}){{ else }}{{ if p.IsValueTask }}pipe.{{ p.MethodName }}(ctx, next){{ else }}SpaceGeneratorRuntimeHelpers.VT(pipe.{{ p.MethodName }}(ctx, next)){{ end }}{{ end }});
+                {{     end }}
+                {{     for gp in h.GlobalPipelineCompileModels }}
+                RegGlobalPipeline<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}, {{ gp.ClassFullName }}>(
+                    new GlobalPipelineConfig(){ Order = {{ gp.Order }}, ExecutionStage = {{ gp.ExecutionStage }} },
+                    (gpipe, ctx, next) => {{ if gp.IsVoidLike }}SpaceGeneratorRuntimeHelpers.ToNothing({{ if gp.IsValueTask }}gpipe.{{ gp.MethodName }}(ctx, next).AsTask(){{ else }}gpipe.{{ gp.MethodName }}(ctx, next){{ end }}){{ else }}{{ if gp.IsValueTask }}gpipe.{{ gp.MethodName }}(ctx, next){{ else }}SpaceGeneratorRuntimeHelpers.VT(gpipe.{{ gp.MethodName }}(ctx, next)){{ end }}{{ end }});
+                {{     end }}
+                {{     for m in h.ModuleCompileModels }}
+                RegModule<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>("{{ h.HandlerName }}", "{{ m.ModuleName }}", "{{m.Profile}}");
+                {{     end }}
+                {{   end }}
                 {{ end }}
 
                 // External assemblies handler registrations

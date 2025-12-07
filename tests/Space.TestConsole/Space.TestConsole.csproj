@@ -5,25 +5,17 @@
 		<TargetFramework>net8.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<LangVersion>latest</LangVersion>
+		<SpaceGenerateRootAggregator>true</SpaceGenerateRootAggregator>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\src\Space.Abstraction\Space.Abstraction.csproj" />
 		<ProjectReference Include="..\..\src\Space.DependencyInjection\Space.DependencyInjection.csproj" />
+		<ProjectReference Include="..\..\src\Space.SourceGenerator\Space.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 	</ItemGroup>
-
-	<!--<PropertyGroup>
-		<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
-		<CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
-	</PropertyGroup>-->
 
 	<ItemGroup>
 		<PackageReference Include="Space.Modules.InMemoryCache" Version="1.1.8" />
 	</ItemGroup>
-	
-	<!--<ItemGroup>
-		<PackageReference Include="Space.Abstraction" Version="1.1.4" />
-		<PackageReference Include="Space.DependencyInjection" Version="1.1.4" />
-	</ItemGroup>-->
 
 </Project>

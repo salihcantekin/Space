@@ -52,6 +52,11 @@ public partial class SpaceRegistry
         handlerRegistry.RegisterPipeline(handlerName, pipelineConfig, pipeline);
     }
 
+    public void RegisterGlobalPipeline<TRequest, TResponse>(GlobalPipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)
+    {
+        handlerRegistry.RegisterGlobalPipeline(config, invoker);
+    }
+
     public void RegisterHandler<TRequest, TResponse>(
         HandlerInvoker<TRequest, TResponse> handler,
         string name = "",

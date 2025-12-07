@@ -20,6 +20,7 @@ public partial class SpaceRegistry
         protected readonly HandlerInvoker<TRequest, TResponse> handlerInvoker;
         protected readonly LightHandlerInvoker<TRequest, TResponse> lightInvoker;
         protected readonly List<PipelineContainer> pipelines;
+        protected readonly List<GlobalPipelineContainer> globalPipelines;
         protected bool hasPipelines; // must be mutable to reflect late pipeline registration
 
         private readonly object composeLock = new();
@@ -47,13 +48,25 @@ public partial class SpaceRegistry
             }
         }
 
+        protected sealed class GlobalPipelineContainer
+        {
+            internal GlobalPipelineConfig Config { get; }
+            internal PipelineInvoker<TRequest, TResponse> Invoker { get; }
+            internal GlobalPipelineContainer(GlobalPipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)
+            {
+                Config = config;
+                Invoker = invoker;
+            }
+        }
+
         internal bool IsPipelineFree => !hasPipelines;
         internal bool HasLightInvoker => lightInvoker != null && !hasPipelines;
 
         protected HandlerEntry(
             HandlerInvoker<TRequest, TResponse> handlerInvoker,
             LightHandlerInvoker<TRequest, TResponse> lightInvoker,
-            IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelineInvokers)
+            IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelineInvokers,
+            IEnumerable<(GlobalPipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> globalPipelineInvokers = null)
         {
             this.handlerInvoker = handlerInvoker;
             this.lightInvoker = lightInvoker;
@@ -62,7 +75,11 @@ public partial class SpaceRegistry
                 ? [.. pipelineInvokers.Select(p => new PipelineContainer(p.config, p.invoker))]
                 : [];
 
-            hasPipelines = pipelines.Count > 0;
+            globalPipelines = globalPipelineInvokers != null
+                ? [.. globalPipelineInvokers.Select(gp => new GlobalPipelineContainer(gp.config, gp.invoker))]
+                : [];
+
+            hasPipelines = pipelines.Count > 0 || globalPipelines.Count > 0;
         }
 
         internal void AddPipeline(PipelineInvoker<TRequest, TResponse> invoker, PipelineConfig pipelineConfig)
@@ -82,7 +99,50 @@ public partial class SpaceRegistry
 
             lock (composeLock)
             {
-                orderedPipelines ??= pipelines.OrderBy(p => p.Config.Order).ToArray();
+                if (orderedPipelines != null)
+                    return orderedPipelines;
+
+                // Combine handler-specific and global pipelines with proper ordering
+                // ExecutionStage: 0=BeforeHandler, 1=BeforeHandlerInner, 2=AfterHandlerInner, 3=AfterHandler
+                var combined = new List<PipelineContainer>();
+
+                // Stage 0: Global pipelines with ExecutionStage = BeforeHandler (0)
+                foreach (var gp in globalPipelines.Where(g => g.Config.ExecutionStage == 0).OrderBy(g => g.Config.Order))
+                {
+                    combined.Add(new PipelineContainer(new PipelineConfig { Order = gp.Config.Order }, gp.Invoker));
+                }
+
+                // Handler-specific pipelines
+                combined.AddRange(pipelines.OrderBy(p => p.Config.Order));
+
+                // Stage 1: Global pipelines with ExecutionStage = BeforeHandlerInner (1)
+                foreach (var gp in globalPipelines.Where(g => g.Config.ExecutionStage == 1).OrderBy(g => g.Config.Order))
+                {
+                    combined.Add(new PipelineContainer(new PipelineConfig { Order = gp.Config.Order }, gp.Invoker));
+                }
+
+                // NOTE: Stages 2 and 3 (AfterHandlerInner, AfterHandler) are not directly composable in this model
+                // because they conceptually execute "after" the handler during unwinding.
+                // In a nested delegate model, the innermost pipelines execute first on the way in and last on the way out.
+                // To simulate "after handler" execution, we reverse the order for those stages.
+                // However, to keep performance optimal and avoid complexity, we'll treat them as additional layers
+                // that wrap the handler but execute their logic in the continuation (after awaiting next).
+
+                // Stage 2: Global pipelines with ExecutionStage = AfterHandlerInner (2) - reverse order
+                var afterInner = globalPipelines.Where(g => g.Config.ExecutionStage == 2).OrderByDescending(g => g.Config.Order).ToList();
+                foreach (var gp in afterInner)
+                {
+                    combined.Add(new PipelineContainer(new PipelineConfig { Order = gp.Config.Order }, gp.Invoker));
+                }
+
+                // Stage 3: Global pipelines with ExecutionStage = AfterHandler (3) - reverse order
+                var afterHandler = globalPipelines.Where(g => g.Config.ExecutionStage == 3).OrderByDescending(g => g.Config.Order).ToList();
+                foreach (var gp in afterHandler)
+                {
+                    combined.Add(new PipelineContainer(new PipelineConfig { Order = gp.Config.Order }, gp.Invoker));
+                }
+
+                orderedPipelines = [.. combined];
             }
 
             return orderedPipelines;
@@ -107,7 +167,7 @@ public partial class SpaceRegistry
                 singlePipelineInvoker = null;
                 cachedFinalDelegate = null;
 
-                if (!hasPipelines || pipelines.Count == 0)
+                if (!hasPipelines || (pipelines.Count == 0 && globalPipelines.Count == 0))
                 {
                     // No pipeline chain: composed is just the handler invoker
                     composedInvoke = handlerInvoker;
@@ -264,8 +324,9 @@ public partial class SpaceRegistry
     {
         public SingletonHandlerEntry(HandlerInvoker<TRequest, TResponse> handlerInvoker,
                                      LightHandlerInvoker<TRequest, TResponse> lightInvoker,
-                                     IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelineInvokers)
-            : base(handlerInvoker, lightInvoker, pipelineInvokers) { }
+                                     IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelineInvokers,
+                                     IEnumerable<(GlobalPipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> globalPipelineInvokers = null)
+            : base(handlerInvoker, lightInvoker, pipelineInvokers, globalPipelineInvokers) { }
 
         // In future, override Invoke to use thread-static contexts or other singleton-specific tricks
     }
@@ -274,7 +335,8 @@ public partial class SpaceRegistry
     {
         public ScopedHandlerEntry(HandlerInvoker<TRequest, TResponse> handlerInvoker,
                                   LightHandlerInvoker<TRequest, TResponse> lightInvoker,
-                                  IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelineInvokers)
-            : base(handlerInvoker, lightInvoker, pipelineInvokers) { }
+                                  IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelineInvokers,
+                                  IEnumerable<(GlobalPipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> globalPipelineInvokers = null)
+            : base(handlerInvoker, lightInvoker, pipelineInvokers, globalPipelineInvokers) { }
     }
 }

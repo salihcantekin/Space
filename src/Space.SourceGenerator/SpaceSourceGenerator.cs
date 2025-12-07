@@ -51,6 +51,15 @@ public sealed class SpaceSourceGenerator : IIncrementalGenerator
             )
             .Where(symbol => symbol is not null);
 
+        // Find all methods with GlobalPipeline attribute
+        var globalPipelineMethods = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                SourceGenConstants.GlobalPipelineAttributeFullName,
+                (node, _) => node is Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax,
+                (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol((Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax)ctx.TargetNode)
+            )
+            .Where(symbol => symbol is not null);
+
         // Find all methods with Notification attribute
         var notificationMethods = context.SyntaxProvider
             .ForAttributeWithMetadataName(
@@ -66,15 +75,17 @@ public sealed class SpaceSourceGenerator : IIncrementalGenerator
         // Combine all models into a single HandlersCompileWrapperModel
         var allModels = handlerMethods.Collect()
             .Combine(pipelineMethods.Collect())
+            .Combine(globalPipelineMethods.Collect())
             .Combine(notificationMethods.Collect())
             .Combine(modules.Collect())
             .Combine(assemblyNameProvider)
             .Combine(analyzerConfig)
             .Select((tuple, _) =>
             {
-                // tuple: (((((handlers, pipelines), notifications), modulesSymbols), assemblyName), rootFlag)
-                var handlers = tuple.Left.Left.Left.Left.Left;
-                var pipelines = tuple.Left.Left.Left.Left.Right;
+                // tuple: ((((((handlers, pipelines), globalPipelines), notifications), modulesSymbols), assemblyName), rootFlag)
+                var handlers = tuple.Left.Left.Left.Left.Left.Left;
+                var pipelines = tuple.Left.Left.Left.Left.Left.Right;
+                var globalPipelines = tuple.Left.Left.Left.Left.Right;
                 var notifications = tuple.Left.Left.Left.Right;
                 var modulesSymbols = tuple.Left.Left.Right;
                 var assemblyName = tuple.Left.Right;
@@ -99,6 +110,9 @@ public sealed class SpaceSourceGenerator : IIncrementalGenerator
 
                 foreach (var pipelineSymbol in pipelines.OfType<IMethodSymbol>())
                     model.AddRangePipelineAttribute(PipelineScanner.ScanPipelines(pipelineSymbol.ContainingType, pipelineSymbol));
+
+                foreach (var globalPipelineSymbol in globalPipelines.OfType<IMethodSymbol>())
+                    model.AddRangeGlobalPipelineAttribute(GlobalPipelineScanner.ScanGlobalPipelines(globalPipelineSymbol.ContainingType, globalPipelineSymbol));
 
                 foreach (var notificationSymbol in notifications.OfType<IMethodSymbol>())
                     model.AddRangeNotificationAttribute(NotificationScanner.ScanHandlers(notificationSymbol.ContainingType, notificationSymbol));

@@ -44,6 +44,13 @@ public static class MethodSymbolExtensions
         return methodSymbol.GetMethodAttribute(attributeName);
     }
 
+    internal static AttributeData GetGlobalPipelineAttribute(this IMethodSymbol methodSymbol)
+    {
+        var attributeName = SourceGenConstants.GlobalPipelineAttributeFullName;
+
+        return methodSymbol.GetMethodAttribute(attributeName);
+    }
+
     public static string GetAttributeArgument(this AttributeData attribute, string argumentName)
     {
         if (attribute is not { NamedArguments.Length: > 0 } || string.IsNullOrEmpty(argumentName))

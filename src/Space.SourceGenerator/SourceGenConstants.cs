@@ -6,6 +6,8 @@ namespace Space.SourceGenerator
         public const string HandleAttributeFullName = $"{NameSpaces.SpaceAbstractionAttributes}.{HandleAttributeName}Attribute";
         public const string PipelineAttributeName = "Pipeline";
         public const string PipelineAttributeFullName = $"{NameSpaces.SpaceAbstractionAttributes}.{PipelineAttributeName}Attribute";
+        public const string GlobalPipelineAttributeName = "GlobalPipeline";
+        public const string GlobalPipelineAttributeFullName = $"{NameSpaces.SpaceAbstractionAttributes}.{GlobalPipelineAttributeName}Attribute";
         public const string NotificationAttributeName = "Notification";
         public const string NotificationAttributeFullName = $"{NameSpaces.SpaceAbstractionAttributes}.{NotificationAttributeName}Attribute";
 
@@ -57,10 +59,12 @@ namespace Space.SourceGenerator
         {
             public const string IHandler = "IHandler";
             public const string IPipelineHandler = "IPipelineHandler";
+            public const string IGlobalPipeline = "IGlobalPipeline";
             public const string INotificationHandler = "INotificationHandler";
 
             public const string HandleMethodName = "Handle";
             public const string PipelineMethodName = "Invoke";
+            public const string GlobalPipelineMethodName = "HandleGlobalPipeline";
             public const string NotificationMethodName = "HandleNotification";
         }
     }
