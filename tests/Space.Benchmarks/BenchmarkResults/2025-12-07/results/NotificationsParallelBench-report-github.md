@@ -10,5 +10,5 @@ Unknown processor
 ```
 | Method                             | Mean     | Error    | StdDev   | Allocated |
 |----------------------------------- |---------:|---------:|---------:|----------:|
-| Space_Publish_Parallel_Inline      | 29.20 ns | 0.092 ns | 0.086 ns |         - |
-| Space_Publish_Parallel_TaskWhenAll | 30.26 ns | 0.106 ns | 0.099 ns |         - |
+| Space_Publish_Parallel_Inline      | 30.08 ns | 0.110 ns | 0.102 ns |         - |
+| Space_Publish_Parallel_TaskWhenAll | 35.19 ns | 0.111 ns | 0.104 ns |         - |

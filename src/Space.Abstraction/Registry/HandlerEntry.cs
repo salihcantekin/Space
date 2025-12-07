@@ -15,53 +15,35 @@ public delegate ValueTask<TResponse> PipelineInvoker<TRequest, TResponse>(Pipeli
 
 public partial class SpaceRegistry
 {
+    /// <summary>
+    /// Base handler entry class for handlers with dynamic pipeline composition.
+    /// For better performance, use specialized entries: LightHandlerEntry, SinglePipelineEntry, etc.
+    /// </summary>
     internal abstract class HandlerEntry<TRequest, TResponse> : IObjectHandlerEntry
     {
         protected readonly HandlerInvoker<TRequest, TResponse> handlerInvoker;
         protected readonly LightHandlerInvoker<TRequest, TResponse> lightInvoker;
-        protected readonly List<PipelineContainer> pipelines;
-        protected List<GlobalPipelineContainer> _globalPipelines; // Lazy initialized
-        protected List<GlobalPipelineContainer> GlobalPipelines => _globalPipelines ??= new List<GlobalPipelineContainer>();
-        protected bool hasPipelines; // must be mutable to reflect late pipeline registration
+        
+        // Pipeline storage - separating handler pipelines from global pipelines
+        private readonly List<(int Order, PipelineInvoker<TRequest, TResponse> Invoker)> handlerPipelines;
+        private readonly List<(int Order, int ExecutionStage, PipelineInvoker<TRequest, TResponse> Invoker)> globalPipelines;
+        private bool hasPipelines;
 
         private readonly object composeLock = new();
-        private PipelineContainer[] orderedPipelines; // cached ordered list
+        private PipelineInvoker<TRequest, TResponse>[] orderedPipelines;
         private bool compositionDirty = true;
 
-        // Composed root pipeline delegate (for 1+ pipelines)
+        // Composed pipeline chain
         private PipelineDelegate<TRequest, TResponse> cachedRootDelegate;
-
-        // Single composed invoker over HandlerContext to minimize branching in Invoke
         private HandlerInvoker<TRequest, TResponse> composedInvoke;
 
-        // Single-pipeline fast path fields
+        // Single-pipeline optimization fields
         private PipelineInvoker<TRequest, TResponse> singlePipelineInvoker;
-        private PipelineDelegate<TRequest, TResponse> cachedFinalDelegate; // calls handlerInvoker with HandlerContextRef
+        private PipelineDelegate<TRequest, TResponse> cachedFinalDelegate;
 
-        protected sealed class PipelineContainer
-        {
-            internal PipelineConfig Config { get; }
-            internal PipelineInvoker<TRequest, TResponse> Invoker { get; }
-            internal PipelineContainer(PipelineConfig pipelineConfig, PipelineInvoker<TRequest, TResponse> invoker)
-            {
-                Config = pipelineConfig;
-                Invoker = invoker;
-            }
-        }
-
-        protected sealed class GlobalPipelineContainer
-        {
-            internal GlobalPipelineConfig Config { get; }
-            internal PipelineInvoker<TRequest, TResponse> Invoker { get; }
-            internal GlobalPipelineContainer(GlobalPipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)
-            {
-                Config = config;
-                Invoker = invoker;
-            }
-        }
-
-        internal bool IsPipelineFree => !hasPipelines;
-        internal bool HasLightInvoker => lightInvoker != null && !hasPipelines;
+        // Virtual properties so specialized entries can override
+        internal virtual bool IsPipelineFree => !hasPipelines;
+        internal virtual bool HasLightInvoker => lightInvoker != null && !hasPipelines;
 
         protected HandlerEntry(
             HandlerInvoker<TRequest, TResponse> handlerInvoker,
@@ -72,28 +54,36 @@ public partial class SpaceRegistry
             this.handlerInvoker = handlerInvoker;
             this.lightInvoker = lightInvoker;
 
-            pipelines = pipelineInvokers != null
-                ? [.. pipelineInvokers.Select(p => new PipelineContainer(p.config, p.invoker))]
-                : [];
+            handlerPipelines = [];
+            globalPipelines = [];
 
-            // Lazy initialization: Only create global pipeline list if needed
-            if (globalPipelineInvokers != null)
+            // Add handler-specific pipelines
+            if (pipelineInvokers != null)
             {
-                _globalPipelines = [.. globalPipelineInvokers.Select(gp => new GlobalPipelineContainer(gp.config, gp.invoker))];
+                foreach (var p in pipelineInvokers)
+                {
+                    handlerPipelines.Add((p.config.Order, p.invoker));
+                }
             }
 
-            hasPipelines = pipelines.Count > 0 || (_globalPipelines != null && _globalPipelines.Count > 0);
+            // Add global pipelines
+            if (globalPipelineInvokers != null)
+            {
+                foreach (var gp in globalPipelineInvokers)
+                {
+                    globalPipelines.Add((gp.config.Order, gp.config.ExecutionStage, gp.invoker));
+                }
+            }
+
+            hasPipelines = handlerPipelines.Count > 0 || globalPipelines.Count > 0;
             
-            // OPTIMIZATION: Pre-compose pipeline chain in constructor to avoid hot-path overhead
-            // This eliminates EnsureComposed() calls in Invoke() for handlers with pipelines
+            // Pre-compose at construction time for performance
             if (hasPipelines)
             {
-                // Pre-compose the pipeline chain at construction time
                 EnsureComposed();
             }
             else
             {
-                // No pipelines: direct handler invocation
                 composedInvoke = handlerInvoker;
                 compositionDirty = false;
             }
@@ -101,68 +91,59 @@ public partial class SpaceRegistry
 
         internal void AddPipeline(PipelineInvoker<TRequest, TResponse> invoker, PipelineConfig pipelineConfig)
         {
-            pipelines.Add(new PipelineContainer(pipelineConfig, invoker));
-            hasPipelines = true; // ensure fast-path bypasses light invoker when any pipeline exists
-            orderedPipelines = null; // invalidate order cache
-            compositionDirty = true; // force recompose
+            handlerPipelines.Add((pipelineConfig.Order, invoker));
+            hasPipelines = true;
+            orderedPipelines = null;
+            compositionDirty = true;
         }
 
-        private PipelineContainer[] GetOrdered()
+        private PipelineInvoker<TRequest, TResponse>[] GetOrdered()
         {
             if (orderedPipelines != null)
-            {
                 return orderedPipelines;
-            }
 
             lock (composeLock)
             {
                 if (orderedPipelines != null)
                     return orderedPipelines;
 
-                // FAST PATH: No global pipelines - just order handler-specific pipelines
-                // Use direct field access to avoid property overhead
-                var globalCount = _globalPipelines?.Count ?? 0;
+                // Build properly ordered pipeline list
+                var result = new List<PipelineInvoker<TRequest, TResponse>>();
+
+                // Stage 0: BeforeHandler global pipelines (execute first, outer)
+                var stage0 = globalPipelines
+                    .Where(gp => gp.ExecutionStage == 0)
+                    .OrderBy(gp => gp.Order)
+                    .Select(gp => gp.Invoker);
+                result.AddRange(stage0);
                 
-                if (globalCount == 0)
-                {
-                    orderedPipelines = [.. pipelines.OrderBy(p => p.Config.Order)];
-                    return orderedPipelines;
-                }
-
-                // SLOW PATH: Combine handler-specific and global pipelines with proper ordering
-                // ExecutionStage: 0=BeforeHandler, 1=BeforeHandlerInner, 2=AfterHandlerInner, 3=AfterHandler
-                var combined = new List<PipelineContainer>();
-
-                // Stage 0: Global pipelines with ExecutionStage = BeforeHandler (0)
-                foreach (var gp in _globalPipelines.Where(g => g.Config.ExecutionStage == 0).OrderBy(g => g.Config.Order))
-                {
-                    combined.Add(new PipelineContainer(new PipelineConfig { Order = gp.Config.Order }, gp.Invoker));
-                }
-
                 // Handler-specific pipelines
-                combined.AddRange(pipelines.OrderBy(p => p.Config.Order));
+                var handlerPipes = handlerPipelines
+                    .OrderBy(hp => hp.Order)
+                    .Select(hp => hp.Invoker);
+                result.AddRange(handlerPipes);
+                
+                // Stage 1: BeforeHandlerInner global pipelines
+                var stage1 = globalPipelines
+                    .Where(gp => gp.ExecutionStage == 1)
+                    .OrderBy(gp => gp.Order)
+                    .Select(gp => gp.Invoker);
+                result.AddRange(stage1);
+                
+                // Stage 2 & 3: AfterHandlerInner and AfterHandler (reverse order)
+                var stage2 = globalPipelines
+                    .Where(gp => gp.ExecutionStage == 2)
+                    .OrderByDescending(gp => gp.Order)
+                    .Select(gp => gp.Invoker);
+                result.AddRange(stage2);
 
-                // Stage 1: Global pipelines with ExecutionStage = BeforeHandlerInner (1)
-                foreach (var gp in _globalPipelines.Where(g => g.Config.ExecutionStage == 1).OrderBy(g => g.Config.Order))
-                {
-                    combined.Add(new PipelineContainer(new PipelineConfig { Order = gp.Config.Order }, gp.Invoker));
-                }
+                var stage3 = globalPipelines
+                    .Where(gp => gp.ExecutionStage == 3)
+                    .OrderByDescending(gp => gp.Order)
+                    .Select(gp => gp.Invoker);
+                result.AddRange(stage3);
 
-                // Stage 2: Global pipelines with ExecutionStage = AfterHandlerInner (2) - reverse order
-                var afterInner = _globalPipelines.Where(g => g.Config.ExecutionStage == 2).OrderByDescending(g => g.Config.Order).ToList();
-                foreach (var gp in afterInner)
-                {
-                    combined.Add(new PipelineContainer(new PipelineConfig { Order = gp.Config.Order }, gp.Invoker));
-                }
-
-                // Stage 3: Global pipelines with ExecutionStage = AfterHandler (3) - reverse order
-                var afterHandler = _globalPipelines.Where(g => g.Config.ExecutionStage == 3).OrderByDescending(g => g.Config.Order).ToList();
-                foreach (var gp in afterHandler)
-                {
-                    combined.Add(new PipelineContainer(new PipelineConfig { Order = gp.Config.Order }, gp.Invoker));
-                }
-
-                orderedPipelines = [.. combined];
+                orderedPipelines = [.. result];
             }
 
             return orderedPipelines;
@@ -171,41 +152,43 @@ public partial class SpaceRegistry
         protected void EnsureComposed()
         {
             if (!compositionDirty)
-            {
                 return;
-            }
 
             lock (composeLock)
             {
                 if (!compositionDirty)
-                {
                     return;
-                }
 
                 cachedRootDelegate = null;
                 composedInvoke = null;
                 singlePipelineInvoker = null;
                 cachedFinalDelegate = null;
 
-                if (!hasPipelines || (pipelines.Count == 0 && (_globalPipelines == null || _globalPipelines.Count == 0)))
+                var totalPipelines = handlerPipelines.Count + globalPipelines.Count;
+
+                if (totalPipelines == 0)
                 {
-                    // No pipeline chain: composed is just the handler invoker
                     composedInvoke = handlerInvoker;
                 }
                 else
                 {
                     var ordered = GetOrdered();
 
-                    // final delegate: invoke the handler with the pre-set HandlerContextRef
-                    cachedFinalDelegate = pc => handlerInvoker(pc.HandlerContextRef);
+                    // Final delegate: invoke the handler with HandlerContextRef
+                    // Check cancellation before invoking handler (after all pipelines)
+                    cachedFinalDelegate = pc =>
+                    {
+                        pc.CancellationToken.ThrowIfCancellationRequested();
+                        return handlerInvoker(pc.HandlerContextRef);
+                    };
 
                     if (ordered.Length == 1)
                     {
-                        singlePipelineInvoker = ordered[0].Invoker;
+                        // Single pipeline fast path
+                        singlePipelineInvoker = ordered[0];
 
                         composedInvoke = (ctx) =>
                         {
-                            // Inline ToPipelineContext to avoid extra call
                             var pc = PipelineContextPool<TRequest>.Get(ctx.Request, ctx.ServiceProvider, ctx.Space, ctx.CancellationToken);
                             pc.HandlerContextRef = ctx;
 
@@ -220,22 +203,20 @@ public partial class SpaceRegistry
                     }
                     else
                     {
-                        // Compose full chain including final handler (via HandlerContextRef)
+                        // Compose full chain
                         PipelineDelegate<TRequest, TResponse> root = cachedFinalDelegate;
 
                         for (int i = ordered.Length - 1; i >= 0; i--)
                         {
                             var current = ordered[i];
                             var next = root;
-                            root = (pctx) => current.Invoker(pctx, next);
+                            root = (pctx) => current(pctx, next);
                         }
 
                         cachedRootDelegate = root;
 
-                        // Compose a single invoker over HandlerContext that handles PipelineContext pooling
                         composedInvoke = (ctx) =>
                         {
-                            // Inline ToPipelineContext to avoid extra call
                             var pc = PipelineContextPool<TRequest>.Get(ctx.Request, ctx.ServiceProvider, ctx.Space, ctx.CancellationToken);
                             pc.HandlerContextRef = ctx;
 
@@ -255,19 +236,17 @@ public partial class SpaceRegistry
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal ValueTask<TResponse> InvokeLight(IServiceProvider sp, ISpace space, TRequest request, CancellationToken ct)
+        internal virtual ValueTask<TResponse> InvokeLight(IServiceProvider sp, ISpace space, TRequest request, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
-#if DEBUG
-            if (!HasLightInvoker)
+            
+            if (lightInvoker == null)
             {
                 var ctxDbg = HandlerContext<TRequest>.Create(sp, request, ct);
-
                 return handlerInvoker(ctxDbg).AwaitAndReturnHandlerInvoke(ctxDbg);
             }
-#endif
+            
             var lctx = new LightHandlerContext<TRequest>(request, sp, space, ct);
-
             return lightInvoker(in lctx);
         }
 
@@ -276,15 +255,9 @@ public partial class SpaceRegistry
         {
             handlerContext.CancellationToken.ThrowIfCancellationRequested();
             
-            // Check if recomposition is needed (e.g., pipeline added after registration)
             if (compositionDirty)
-            {
                 EnsureComposed();
-            }
             
-            // composedInvoke is pre-set in constructor or recomposed when dirty
-            // For pipeline-free handlers: direct handlerInvoker call
-            // For handlers with pipelines: pre-composed delegate chain
             return composedInvoke(handlerContext);
         }
 
@@ -295,9 +268,7 @@ public partial class SpaceRegistry
                 var vtLight = InvokeLight(handlerContext.ServiceProvider, handlerContext.Space, (TRequest)handlerContext.Request, handlerContext.CancellationToken);
 
                 if (vtLight.IsCompletedSuccessfully)
-                {
                     return new ValueTask<object>(vtLight.Result!);
-                }
 
                 return AwaitLight(vtLight);
 
@@ -308,7 +279,7 @@ public partial class SpaceRegistry
                 }
             }
 
-            if (!hasPipelines)
+            if (IsPipelineFree)
             {
                 var ctxFast = HandlerContext<TRequest>.Create(handlerContext);
                 var vtFast = handlerInvoker(ctxFast);
@@ -348,7 +319,9 @@ public partial class SpaceRegistry
         }
     }
 
-    // Specialized entries (currently behavior is the same because DI differences are handled by generator; kept for future specialization)
+    /// <summary>
+    /// Handler entry for Singleton lifetime. Currently same as base but kept for future optimizations.
+    /// </summary>
     internal sealed class SingletonHandlerEntry<TRequest, TResponse> : HandlerEntry<TRequest, TResponse>
     {
         public SingletonHandlerEntry(HandlerInvoker<TRequest, TResponse> handlerInvoker,
@@ -356,10 +329,11 @@ public partial class SpaceRegistry
                                      IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelineInvokers,
                                      IEnumerable<(GlobalPipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> globalPipelineInvokers = null)
             : base(handlerInvoker, lightInvoker, pipelineInvokers, globalPipelineInvokers) { }
-
-        // In future, override Invoke to use thread-static contexts or other singleton-specific tricks
     }
 
+    /// <summary>
+    /// Handler entry for Scoped/Transient lifetime.
+    /// </summary>
     internal sealed class ScopedHandlerEntry<TRequest, TResponse> : HandlerEntry<TRequest, TResponse>
     {
         public ScopedHandlerEntry(HandlerInvoker<TRequest, TResponse> handlerInvoker,

@@ -10,6 +10,6 @@ Unknown processor
 ```
 | Method           | Mean     | Error    | StdDev   | Gen0   | Allocated |
 |----------------- |---------:|---------:|---------:|-------:|----------:|
-| Space_Publish    | 40.40 ns | 0.076 ns | 0.071 ns |      - |         - |
-| Mediator_Publish | 18.72 ns | 0.050 ns | 0.041 ns |      - |         - |
-| MediatR_Publish  | 72.06 ns | 0.461 ns | 0.431 ns | 0.0238 |     400 B |
+| Space_Publish    | 40.08 ns | 0.131 ns | 0.123 ns |      - |         - |
+| Mediator_Publish | 18.82 ns | 0.068 ns | 0.063 ns |      - |         - |
+| MediatR_Publish  | 72.04 ns | 0.376 ns | 0.314 ns | 0.0238 |     400 B |

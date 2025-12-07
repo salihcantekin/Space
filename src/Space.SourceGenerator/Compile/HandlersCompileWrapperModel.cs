@@ -54,13 +54,7 @@ public class HandlersCompileWrapperModel
     // Standalone global pipelines (not attached to any specific handler class)
     public List<GlobalPipelineCompileModel> StandaloneGlobalPipelines { get; private set; }
 
-    // Helper usage flags consumed by Scriban templates to suppress generation of unused locals (avoid CS8321 warnings)
-    public bool NeedsReg { get; private set; }
-    public bool NeedsRegLight { get; private set; }
-    public bool NeedsRegPipe { get; private set; }
-    public bool NeedsRegGlobalPipeline { get; private set; }
-    public bool NeedsRegModule { get; private set; }
-    public bool NeedsRegNotification { get; private set; }
+    // Helper usage flags - now simplified since we use SpaceRegistrationHelpers
     public bool NeedsVT { get; private set; }
 
     public void AddRangeHandlerAttribute(IEnumerable<HandlersCompileModel> models)
@@ -135,19 +129,18 @@ public class HandlersCompileWrapperModel
             var pipelineAllMatches = pipelineNameMatch
                 .Union(pipelineTypeMatch)
                 .Distinct()
-                .OrderBy(i => i.Order); // Order by the pipeline order
+                .OrderBy(i => i.Order);
 
             handlerCompileModel.PipelineCompileModels = [.. pipelineAllMatches];
 
             // Check if there are global pipelines for this handler's request/response type
-            // We don't attach them to the handler model (they're registered centrally),
-            // but we need to know if they exist to decide between Reg and RegLight
             var globalPipelineMatches = globalPipelineCompileModels
                 .Where(gp => gp.ReturnTypeName == handlerCompileModel.ReturnTypeName
                           && gp.RequestParameterTypeName == handlerCompileModel.RequestParameterTypeName)
+                .OrderBy(gp => gp.ExecutionStage)
+                .ThenBy(gp => gp.Order)
                 .ToList();
 
-            // Store in GlobalPipelineCompileModels so template can check .size
             handlerCompileModel.GlobalPipelineCompileModels = [.. globalPipelineMatches];
 
             var moduleTypeMatch = moduleCompileModels
@@ -167,7 +160,7 @@ public class HandlersCompileWrapperModel
         PipelineClassNames = [.. pipelineCompileModels
             .Select(m => m.ClassFullName.Globalize())
             .Except(HandlerClassNames)
-            .Distinct()]; // they might be in the same class
+            .Distinct()];
 
         GlobalPipelineClassNames = [.. globalPipelineCompileModels
             .Select(m => m.ClassFullName.Globalize())
@@ -196,19 +189,10 @@ public class HandlersCompileWrapperModel
         // will be registered centrally via GlobalPipelineCompileModels
         StandaloneGlobalPipelines = [];
 
-        // Flags: use per-handler attachment, not global collection counts, to avoid unused helper generation
-        NeedsRegNotification = notificationCompileModels.Count > 0;
-        NeedsRegPipe = handlerCompileModels.Any(h => h.PipelineCompileModels.Length > 0);
-        NeedsRegGlobalPipeline = globalPipelineCompileModels.Count > 0;
-        NeedsRegModule = handlerCompileModels.Any(h => h.ModuleCompileModels.Length > 0);
-        
-        // NeedsReg is true when handlers have pipelines, modules, OR global pipelines
-        NeedsReg = handlerCompileModels.Any(h => h.PipelineCompileModels.Length > 0 || h.ModuleCompileModels.Length > 0 || h.GlobalPipelineCompileModels.Length > 0);
-        
-        // NeedsRegLight is true when ANY handler has no pipelines, no modules, and no global pipelines
-        NeedsRegLight = handlerCompileModels.Any(h => h.PipelineCompileModels.Length == 0 && h.ModuleCompileModels.Length == 0 && h.GlobalPipelineCompileModels.Length == 0);
-        
-        NeedsVT = handlerCompileModels.Any(h => !h.IsValueTask) || pipelineCompileModels.Any(p => !p.IsValueTask) || globalPipelineCompileModels.Any(gp => !gp.IsValueTask);
+        // Only need VT flag now since other helpers are in SpaceRegistrationHelpers
+        NeedsVT = handlerCompileModels.Any(h => !h.IsValueTask) || 
+                  pipelineCompileModels.Any(p => !p.IsValueTask) || 
+                  globalPipelineCompileModels.Any(gp => !gp.IsValueTask);
 
         return this;
     }
