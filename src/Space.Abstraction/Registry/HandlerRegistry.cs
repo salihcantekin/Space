@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -27,10 +28,53 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
     {
         internal GlobalPipelineConfig Config { get; }
         internal object Invoker { get; } // PipelineInvoker<TRequest, TResponse>
+        
         internal GlobalPipelineContainer(GlobalPipelineConfig config, object invoker)
         {
             Config = config;
             Invoker = invoker;
+        }
+        
+        // Override Equals and GetHashCode for duplicate detection
+        // Two pipelines are the same if they have same Order, ExecutionStage, and delegate method
+        public override bool Equals(object obj)
+        {
+            if (obj is not GlobalPipelineContainer other)
+                return false;
+            
+            // Different config means different pipeline
+            if (Config.Order != other.Config.Order || Config.ExecutionStage != other.Config.ExecutionStage)
+                return false;
+            
+            // Check if the delegate targets the same method
+            if (Invoker is Delegate thisDelegate && other.Invoker is Delegate otherDelegate)
+            {
+                // Same method and target means duplicate
+                return thisDelegate.Method == otherDelegate.Method && 
+                       Equals(thisDelegate.Target, otherDelegate.Target);
+            }
+            
+            return false;
+        }
+        
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = 17;
+                hash = hash * 23 + Config.Order;
+                hash = hash * 23 + (int)Config.ExecutionStage;
+                
+                // Include delegate method info in hash
+                if (Invoker is Delegate del)
+                {
+                    hash = hash * 23 + del.Method.GetHashCode();
+                    if (del.Target != null)
+                        hash = hash * 23 + del.Target.GetHashCode();
+                }
+                
+                return hash;
+            }
         }
     }
 
@@ -100,6 +144,7 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
             globalPipelineMap[typeKey] = list;
         }
 
+        // Simply add - duplicates are prevented by GlobalPipelineCompileModels being a HashSet
         list.Add(new GlobalPipelineContainer(config, invoker));
     }
 

@@ -35,6 +35,9 @@ public class HandlersCompileWrapperModel
     public HashSet<NotificationCompileModel> Notifications => notificationCompileModels;
 
     public HashSet<ModuleCompileModel> ModuleCompileModels => moduleCompileModels;
+    
+    public HashSet<GlobalPipelineCompileModel> GlobalPipelineCompileModels => globalPipelineCompileModels;
+    
     public IEnumerable<ModuleProviderCompileModel> ModuleProviders => ModuleCompileModels.Select(i => new ModuleProviderCompileModel(i.ModuleName)).Distinct();
 
 
@@ -93,7 +96,19 @@ public class HandlersCompileWrapperModel
     {
         foreach (var model in models)
         {
-            globalPipelineCompileModels.Add(model);
+            // Manual deduplication using key fields since record Equals includes all properties
+            var isDuplicate = globalPipelineCompileModels.Any(existing =>
+                existing.ClassFullName == model.ClassFullName &&
+                existing.MethodName == model.MethodName &&
+                existing.RequestParameterTypeName == model.RequestParameterTypeName &&
+                existing.ReturnTypeName == model.ReturnTypeName &&
+                existing.Order == model.Order &&
+                existing.ExecutionStage == model.ExecutionStage);
+            
+            if (!isDuplicate)
+            {
+                globalPipelineCompileModels.Add(model);
+            }
         }
     }
 
@@ -124,14 +139,15 @@ public class HandlersCompileWrapperModel
 
             handlerCompileModel.PipelineCompileModels = [.. pipelineAllMatches];
 
-            // Attach global pipelines to handlers with matching request/response types
+            // Check if there are global pipelines for this handler's request/response type
+            // We don't attach them to the handler model (they're registered centrally),
+            // but we need to know if they exist to decide between Reg and RegLight
             var globalPipelineMatches = globalPipelineCompileModels
                 .Where(gp => gp.ReturnTypeName == handlerCompileModel.ReturnTypeName
                           && gp.RequestParameterTypeName == handlerCompileModel.RequestParameterTypeName)
-                .OrderBy(gp => gp.ExecutionStage)
-                .ThenBy(gp => gp.Order)
                 .ToList();
 
+            // Store in GlobalPipelineCompileModels so template can check .size
             handlerCompileModel.GlobalPipelineCompileModels = [.. globalPipelineMatches];
 
             var moduleTypeMatch = moduleCompileModels
@@ -176,21 +192,22 @@ public class HandlersCompileWrapperModel
             .GroupBy(h => (h.RequestParameterTypeName, h.ReturnTypeName))
             .SelectMany(g => g.OrderBy(h => h.IsDefault ? 1 : 0))];
 
-        // Collect standalone global pipelines (those in classes that don't have handlers)
-        // Only include GENERIC global pipelines (IsGeneric = true) as standalone
-        // Non-generic ones are already attached to specific handlers by type matching
-        StandaloneGlobalPipelines = [.. globalPipelineCompileModels
-            .Where(gp => !HandlerClassNames.Contains(gp.ClassFullName.Globalize()) && gp.IsGeneric)
-            .OrderBy(gp => gp.ExecutionStage)
-            .ThenBy(gp => gp.Order)];
+        // Standalone global pipelines are no longer needed - all global pipelines
+        // will be registered centrally via GlobalPipelineCompileModels
+        StandaloneGlobalPipelines = [];
 
         // Flags: use per-handler attachment, not global collection counts, to avoid unused helper generation
         NeedsRegNotification = notificationCompileModels.Count > 0;
         NeedsRegPipe = handlerCompileModels.Any(h => h.PipelineCompileModels.Length > 0);
-        NeedsRegGlobalPipeline = globalPipelineCompileModels.Count > 0; // Changed: check standalone global pipelines too
+        NeedsRegGlobalPipeline = globalPipelineCompileModels.Count > 0;
         NeedsRegModule = handlerCompileModels.Any(h => h.ModuleCompileModels.Length > 0);
+        
+        // NeedsReg is true when handlers have pipelines, modules, OR global pipelines
         NeedsReg = handlerCompileModels.Any(h => h.PipelineCompileModels.Length > 0 || h.ModuleCompileModels.Length > 0 || h.GlobalPipelineCompileModels.Length > 0);
+        
+        // NeedsRegLight is true when ANY handler has no pipelines, no modules, and no global pipelines
         NeedsRegLight = handlerCompileModels.Any(h => h.PipelineCompileModels.Length == 0 && h.ModuleCompileModels.Length == 0 && h.GlobalPipelineCompileModels.Length == 0);
+        
         NeedsVT = handlerCompileModels.Any(h => !h.IsValueTask) || pipelineCompileModels.Any(p => !p.IsValueTask) || globalPipelineCompileModels.Any(gp => !gp.IsValueTask);
 
         return this;

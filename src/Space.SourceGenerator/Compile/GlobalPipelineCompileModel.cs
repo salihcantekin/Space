@@ -1,4 +1,5 @@
 using Space.SourceGenerator.Extensions;
+using System;
 using System.Collections.Generic;
 
 namespace Space.SourceGenerator.Compile;
@@ -29,7 +30,36 @@ public record GlobalPipelineCompileModel : BaseCompileModel
 
     public Dictionary<string, object> Properties { get; set; } = [];
 
-    public override int GetHashCode() => ToString().GetHashCode();
+    // Override record's synthesized Equals to only compare key fields for HashSet duplicate detection
+    // Two global pipelines are the same if they have the same ClassFullName, MethodName, RequestType, ResponseType, Order, and ExecutionStage
+    public virtual bool Equals(GlobalPipelineCompileModel other)
+    {
+        if (other is null) return false;
+        if (ReferenceEquals(this, other)) return true;
+        
+        // Only compare key identifying fields, not all properties like Properties dictionary
+        return ClassFullName == other.ClassFullName &&
+               MethodName == other.MethodName &&
+               RequestParameterTypeName == other.RequestParameterTypeName &&
+               ReturnTypeName == other.ReturnTypeName &&
+               Order == other.Order &&
+               ExecutionStage == other.ExecutionStage;
+    }
 
-    public override string ToString() => $"{ClassFullName}.{MethodName}(GlobalPipeline<{RequestParameterTypeName}, {ReturnTypeName}>)";
+    public override int GetHashCode()
+    {
+        unchecked
+        {
+            int hash = 17;
+            hash = hash * 23 + (ClassFullName?.GetHashCode() ?? 0);
+            hash = hash * 23 + (MethodName?.GetHashCode() ?? 0);
+            hash = hash * 23 + (RequestParameterTypeName?.GetHashCode() ?? 0);
+            hash = hash * 23 + (ReturnTypeName?.GetHashCode() ?? 0);
+            hash = hash * 23 + Order;
+            hash = hash * 23 + ExecutionStage;
+            return hash;
+        }
+    }
+
+    public override string ToString() => $"{ClassFullName}.{MethodName}(GlobalPipeline<{RequestParameterTypeName}, {ReturnTypeName}>, Order={Order}, Stage={ExecutionStage})";
 }

@@ -10,6 +10,6 @@ Unknown processor
 ```
 | Method                     | Mean      | Error    | StdDev   | Gen0   | Allocated |
 |--------------------------- |----------:|---------:|---------:|-------:|----------:|
-| Space_Send_WithPipeline    |  83.08 ns | 0.328 ns | 0.291 ns |      - |         - |
-| Mediator_Send_WithBehavior |  18.90 ns | 0.039 ns | 0.032 ns | 0.0014 |      24 B |
-| MediatR_Send_WithBehavior  | 261.47 ns | 2.877 ns | 2.550 ns | 0.0973 |    1632 B |
+| Space_Send_WithPipeline    |  77.92 ns | 0.328 ns | 0.307 ns |      - |         - |
+| Mediator_Send_WithBehavior |  19.15 ns | 0.062 ns | 0.055 ns | 0.0014 |      24 B |
+| MediatR_Send_WithBehavior  | 266.54 ns | 3.665 ns | 3.428 ns | 0.0973 |    1632 B |

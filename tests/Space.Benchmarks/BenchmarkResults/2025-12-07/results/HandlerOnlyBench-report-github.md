@@ -10,6 +10,6 @@ Unknown processor
 ```
 | Method        | Mean      | Error    | StdDev   | Gen0   | Allocated |
 |-------------- |----------:|---------:|---------:|-------:|----------:|
-| Space_Send    |  90.63 ns | 0.380 ns | 0.337 ns |      - |         - |
-| Mediator_Send |  17.22 ns | 0.054 ns | 0.045 ns | 0.0014 |      24 B |
-| MediatR_Send  | 238.75 ns | 1.966 ns | 1.743 ns | 0.0901 |    1512 B |
+| Space_Send    |  36.91 ns | 0.203 ns | 0.169 ns |      - |         - |
+| Mediator_Send |  17.65 ns | 0.274 ns | 0.242 ns | 0.0014 |      24 B |
+| MediatR_Send  | 244.40 ns | 2.025 ns | 1.581 ns | 0.0901 |    1512 B |

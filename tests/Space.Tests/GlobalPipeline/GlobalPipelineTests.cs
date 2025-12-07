@@ -12,8 +12,24 @@ public class GlobalPipelineTests
 {
     private ISpace Space;
 
-    public record TestReq(string Value) : IRequest<TestRes>;
-    public record TestRes(string Value);
+    // Separate request/response types for each test to avoid cross-contamination
+    public record BasicTestReq(string Value) : IRequest<BasicTestRes>;
+    public record BasicTestRes(string Value);
+
+    public record TypeMatchReq(string Value) : IRequest<TypeMatchRes>;
+    public record TypeMatchRes(string Value);
+
+    public record BeforeHandlerReq(string Value) : IRequest<BeforeHandlerRes>;
+    public record BeforeHandlerRes(string Value);
+
+    public record InnerStageReq(string Value) : IRequest<InnerStageRes>;
+    public record InnerStageRes(string Value);
+
+    public record MultiPipelineReq(string Value) : IRequest<MultiPipelineRes>;
+    public record MultiPipelineRes(string Value);
+
+    public record InterfaceTestReq(string Value) : IRequest<InterfaceTestRes>;
+    public record InterfaceTestRes(string Value);
 
     public record AnotherReq(int Value) : IRequest<AnotherRes>;
     public record AnotherRes(int Value);
@@ -34,12 +50,12 @@ public class GlobalPipelineTests
         Space = sp.GetRequiredService<ISpace>();
 
         // Act
-        var res1 = await Space.Send<TestReq, TestRes>(new TestReq("A"), name: "H1");
-        var res2 = await Space.Send<TestReq, TestRes>(new TestReq("B"), name: "H2");
+        var res1 = await Space.Send<BasicTestReq, BasicTestRes>(new BasicTestReq("A"), name: "H1");
+        var res2 = await Space.Send<BasicTestReq, BasicTestRes>(new BasicTestReq("B"), name: "H2");
 
-        // Assert
-        Assert.AreEqual("A:H1:GP", res1.Value);
-        Assert.AreEqual("B:H2:GP", res2.Value);
+        // Assert - Only BasicGlobalPipeline applies to BasicTestReq
+        Assert.AreEqual("A:H1:BASICGP", res1.Value);
+        Assert.AreEqual("B:H2:BASICGP", res2.Value);
     }
 
     [TestMethod]
@@ -52,11 +68,11 @@ public class GlobalPipelineTests
         Space = sp.GetRequiredService<ISpace>();
 
         // Act
-        var testRes = await Space.Send<TestReq, TestRes>(new TestReq("X"));
+        var typeMatchRes = await Space.Send<TypeMatchReq, TypeMatchRes>(new TypeMatchReq("X"));
         var anotherRes = await Space.Send<AnotherReq, AnotherRes>(new AnotherReq(42));
 
-        // Assert - TestReq has global pipeline, AnotherReq doesn't
-        Assert.AreEqual("X:TestHandler:GP", testRes.Value);
+        // Assert - TypeMatchReq has global pipeline, AnotherReq doesn't
+        Assert.AreEqual("X:TypeMatchHandler:TYPEMATCHGP", typeMatchRes.Value);
         Assert.AreEqual(43, anotherRes.Value); // No global pipeline
     }
 
@@ -70,9 +86,10 @@ public class GlobalPipelineTests
         Space = sp.GetRequiredService<ISpace>();
 
         // Act
-        var res = await Space.Send<TestReq, TestRes>(new TestReq("X"), name: "WithPipeline");
+        var res = await Space.Send<BeforeHandlerReq, BeforeHandlerRes>(new BeforeHandlerReq("X"), name: "WithPipeline");
 
-        // Assert - Order: GlobalBeforeHandler -> HandlerPipeline -> Handler
+        // Assert - Order: GlobalBeforeHandler (stage 0, outer) -> HandlerPipeline -> Handler
+        // Post-processing: Handler result -> Pipeline adds transformation -> GlobalBeforeHandler adds transformation
         Assert.AreEqual("X:BeforeHandler:Pipeline:Handler", res.Value);
     }
 
@@ -86,9 +103,10 @@ public class GlobalPipelineTests
         Space = sp.GetRequiredService<ISpace>();
 
         // Act
-        var res = await Space.Send<TestReq, TestRes>(new TestReq("Y"), name: "WithInnerGlobal");
+        var res = await Space.Send<InnerStageReq, InnerStageRes>(new InnerStageReq("Y"), name: "WithInnerGlobal");
 
-        // Assert - Order: HandlerPipeline -> GlobalBeforeHandlerInner -> Handler
+        // Assert - Order: HandlerPipeline (outer) -> GlobalBeforeHandlerInner (stage 1, inner) -> Handler
+        // Post-processing: Handler -> GlobalBeforeHandlerInner adds ":BeforeHandlerInner" -> Pipeline wraps
         Assert.AreEqual("Y:Pipeline:BeforeHandlerInner:Handler", res.Value);
     }
 
@@ -102,9 +120,11 @@ public class GlobalPipelineTests
         Space = sp.GetRequiredService<ISpace>();
 
         // Act
-        var res = await Space.Send<TestReq, TestRes>(new TestReq("Z"), name: "MultiGlobal");
+        var res = await Space.Send<MultiPipelineReq, MultiPipelineRes>(new MultiPipelineReq("Z"), name: "MultiGlobal");
 
-        // Assert - GlobalPipeline1 (Order=10) -> GlobalPipeline2 (Order=20) -> Handler
+        // Assert - Multiple global pipelines in same stage execute by Order
+        // GP1 (Order=10, outer) -> GP2 (Order=20, inner) -> Handler
+        // Post-processing: Handler -> GP2 adds "GP2" -> GP1 adds "GP1"
         Assert.AreEqual("Z:GP1:GP2:Handler", res.Value);
     }
 
@@ -118,10 +138,10 @@ public class GlobalPipelineTests
         Space = sp.GetRequiredService<ISpace>();
 
         // Act
-        var res = await Space.Send<TestReq, TestRes>(new TestReq("Interface"));
+        var res = await Space.Send<InterfaceTestReq, InterfaceTestRes>(new InterfaceTestReq("Interface"));
 
-        // Assert
-        Assert.AreEqual("Interface:TestHandler:GP", res.Value);
+        // Assert - Only InterfaceBasedGlobalPipeline applies to InterfaceTestReq
+        Assert.AreEqual("Interface:InterfaceHandler:GPINTERFACE", res.Value);
     }
 
     [TestMethod]
@@ -140,98 +160,150 @@ public class GlobalPipelineTests
         Assert.AreEqual(101, res.Value);
     }
 
-    // Test handlers and pipelines
-    public class TestHandlers
+    // Handlers for BasicTestReq
+    public class BasicHandlers
     {
         [Handle(Name = "H1")]
-        public ValueTask<TestRes> Handler1(HandlerContext<TestReq> ctx)
-            => ValueTask.FromResult(new TestRes(ctx.Request.Value + ":H1"));
+        public ValueTask<BasicTestRes> Handler1(HandlerContext<BasicTestReq> ctx)
+            => ValueTask.FromResult(new BasicTestRes(ctx.Request.Value + ":H1"));
 
         [Handle(Name = "H2")]
-        public ValueTask<TestRes> Handler2(HandlerContext<TestReq> ctx)
-            => ValueTask.FromResult(new TestRes(ctx.Request.Value + ":H2"));
+        public ValueTask<BasicTestRes> Handler2(HandlerContext<BasicTestReq> ctx)
+            => ValueTask.FromResult(new BasicTestRes(ctx.Request.Value + ":H2"));
+    }
 
+    // Handler for TypeMatchReq
+    public class TypeMatchHandlers
+    {
         [Handle]
-        public ValueTask<TestRes> TestHandler(HandlerContext<TestReq> ctx)
-            => ValueTask.FromResult(new TestRes(ctx.Request.Value + ":TestHandler"));
+        public ValueTask<TypeMatchRes> TypeMatchHandler(HandlerContext<TypeMatchReq> ctx)
+            => ValueTask.FromResult(new TypeMatchRes(ctx.Request.Value + ":TypeMatchHandler"));
+    }
 
+    // Handlers for BeforeHandlerReq
+    public class BeforeHandlerTestHandlers
+    {
         [Handle(Name = "WithPipeline")]
-        public ValueTask<TestRes> HandlerWithPipeline(HandlerContext<TestReq> ctx)
-            => ValueTask.FromResult(new TestRes(ctx.Request.Value + ":Handler"));
+        public ValueTask<BeforeHandlerRes> HandlerWithPipeline(HandlerContext<BeforeHandlerReq> ctx)
+            => ValueTask.FromResult(new BeforeHandlerRes(ctx.Request.Value + ":Handler"));
 
         [Pipeline("WithPipeline", Order = 50)]
-        public async ValueTask<TestRes> Pipeline1(PipelineContext<TestReq> ctx, PipelineDelegate<TestReq, TestRes> next)
+        public async ValueTask<BeforeHandlerRes> Pipeline1(PipelineContext<BeforeHandlerReq> ctx, PipelineDelegate<BeforeHandlerReq, BeforeHandlerRes> next)
         {
             var res = await next(ctx);
-            return new TestRes(res.Value.Replace(":Handler", ":Pipeline:Handler"));
+            return new BeforeHandlerRes(res.Value.Replace(":Handler", ":Pipeline:Handler"));
         }
+    }
 
+    // Handlers for InnerStageReq
+    public class InnerStageTestHandlers
+    {
         [Handle(Name = "WithInnerGlobal")]
-        public ValueTask<TestRes> HandlerWithInner(HandlerContext<TestReq> ctx)
-            => ValueTask.FromResult(new TestRes(ctx.Request.Value + ":Handler"));
+        public ValueTask<InnerStageRes> HandlerWithInner(HandlerContext<InnerStageReq> ctx)
+            => ValueTask.FromResult(new InnerStageRes(ctx.Request.Value + ":Handler"));
 
         [Pipeline("WithInnerGlobal", Order = 40)]
-        public async ValueTask<TestRes> PipelineForInner(PipelineContext<TestReq> ctx, PipelineDelegate<TestReq, TestRes> next)
+        public async ValueTask<InnerStageRes> PipelineForInner(PipelineContext<InnerStageReq> ctx, PipelineDelegate<InnerStageReq, InnerStageRes> next)
         {
             var res = await next(ctx);
-            return new TestRes(res.Value.Replace(":BeforeHandlerInner:Handler", ":Pipeline:BeforeHandlerInner:Handler"));
+            return new InnerStageRes(res.Value.Replace(":BeforeHandlerInner:Handler", ":Pipeline:BeforeHandlerInner:Handler"));
         }
+    }
 
+    // Handler for MultiPipelineReq
+    public class MultiPipelineHandlers
+    {
         [Handle(Name = "MultiGlobal")]
-        public ValueTask<TestRes> HandlerMulti(HandlerContext<TestReq> ctx)
-            => ValueTask.FromResult(new TestRes(ctx.Request.Value + ":Handler"));
+        public ValueTask<MultiPipelineRes> HandlerMulti(HandlerContext<MultiPipelineReq> ctx)
+            => ValueTask.FromResult(new MultiPipelineRes(ctx.Request.Value + ":Handler"));
+    }
 
+    // Handler for InterfaceTestReq
+    public class InterfaceTestHandlers
+    {
+        [Handle]
+        public ValueTask<InterfaceTestRes> InterfaceHandler(HandlerContext<InterfaceTestReq> ctx)
+            => ValueTask.FromResult(new InterfaceTestRes(ctx.Request.Value + ":InterfaceHandler"));
+    }
+
+    // Handler for AnotherReq (no global pipeline)
+    public class AnotherHandlers
+    {
         [Handle]
         public ValueTask<AnotherRes> AnotherHandler(HandlerContext<AnotherReq> ctx)
             => ValueTask.FromResult(new AnotherRes(ctx.Request.Value + 1));
     }
 
-    public class GlobalTestPipeline
+    // Global pipeline for BasicTestReq only
+    public class BasicGlobalPipeline
     {
         [GlobalPipeline(Order = 100, ExecutionStage = GlobalPipelineExecutionStage.BeforeHandler)]
-        public async ValueTask<TestRes> GlobalPipe(PipelineContext<TestReq> ctx, PipelineDelegate<TestReq, TestRes> next)
+        public async ValueTask<BasicTestRes> GlobalPipe(PipelineContext<BasicTestReq> ctx, PipelineDelegate<BasicTestReq, BasicTestRes> next)
         {
             var res = await next(ctx);
-            return new TestRes(res.Value + ":GP");
-        }
-
-        [GlobalPipeline(Order = 10, ExecutionStage = GlobalPipelineExecutionStage.BeforeHandler)]
-        public async ValueTask<TestRes> GlobalBeforeHandler(PipelineContext<TestReq> ctx, PipelineDelegate<TestReq, TestRes> next)
-        {
-            var res = await next(ctx);
-            return new TestRes(res.Value.Replace(":Pipeline:", ":BeforeHandler:Pipeline:"));
-        }
-
-        [GlobalPipeline(Order = 100, ExecutionStage = GlobalPipelineExecutionStage.BeforeHandlerInner)]
-        public async ValueTask<TestRes> GlobalBeforeHandlerInner(PipelineContext<TestReq> ctx, PipelineDelegate<TestReq, TestRes> next)
-        {
-            var res = await next(ctx);
-            return new TestRes(res.Value.Replace(":Handler", ":BeforeHandlerInner:Handler"));
-        }
-
-        [GlobalPipeline(Order = 10, ExecutionStage = GlobalPipelineExecutionStage.BeforeHandler)]
-        public async ValueTask<TestRes> GlobalPipe1(PipelineContext<TestReq> ctx, PipelineDelegate<TestReq, TestRes> next)
-        {
-            var res = await next(ctx);
-            return new TestRes(res.Value.Replace(":Handler", ":GP1:GP2:Handler").Replace(":GP2:GP2:", ":GP2:"));
-        }
-
-        [GlobalPipeline(Order = 20, ExecutionStage = GlobalPipelineExecutionStage.BeforeHandler)]
-        public async ValueTask<TestRes> GlobalPipe2(PipelineContext<TestReq> ctx, PipelineDelegate<TestReq, TestRes> next)
-        {
-            var res = await next(ctx);
-            return new TestRes(res.Value.Replace(":GP1:", ":GP1:GP2:"));
+            return new BasicTestRes(res.Value + ":BASICGP");
         }
     }
 
-    // Test with IGlobalPipeline interface
-    public class InterfaceBasedGlobalPipeline : IGlobalPipeline<TestReq, TestRes>
+    // Global pipeline for TypeMatchReq only
+    public class TypeMatchGlobalPipeline
     {
-        [GlobalPipeline]
-        public async ValueTask<TestRes> HandleGlobalPipeline(PipelineContext<TestReq> ctx, PipelineDelegate<TestReq, TestRes> next)
+        [GlobalPipeline(Order = 100, ExecutionStage = GlobalPipelineExecutionStage.BeforeHandler)]
+        public async ValueTask<TypeMatchRes> GlobalPipe(PipelineContext<TypeMatchReq> ctx, PipelineDelegate<TypeMatchReq, TypeMatchRes> next)
         {
             var res = await next(ctx);
-            return new TestRes(res.Value + ":GP");
+            return new TypeMatchRes(res.Value + ":TYPEMATCHGP");
+        }
+    }
+
+    // Global pipelines for BeforeHandlerReq
+    public class BeforeHandlerGlobalPipelines
+    {
+        [GlobalPipeline(Order = 10, ExecutionStage = GlobalPipelineExecutionStage.BeforeHandler)]
+        public async ValueTask<BeforeHandlerRes> GlobalBeforeHandler(PipelineContext<BeforeHandlerReq> ctx, PipelineDelegate<BeforeHandlerReq, BeforeHandlerRes> next)
+        {
+            var res = await next(ctx);
+            return new BeforeHandlerRes(res.Value.Replace(":Pipeline:", ":BeforeHandler:Pipeline:"));
+        }
+    }
+
+    // Global pipelines for InnerStageReq
+    public class InnerStageGlobalPipelines
+    {
+        [GlobalPipeline(Order = 100, ExecutionStage = GlobalPipelineExecutionStage.BeforeHandlerInner)]
+        public async ValueTask<InnerStageRes> GlobalBeforeHandlerInner(PipelineContext<InnerStageReq> ctx, PipelineDelegate<InnerStageReq, InnerStageRes> next)
+        {
+            var res = await next(ctx);
+            return new InnerStageRes(res.Value.Replace(":Handler", ":BeforeHandlerInner:Handler"));
+        }
+    }
+
+    // Multiple global pipelines for MultiPipelineReq
+    public class MultiGlobalPipelines
+    {
+        [GlobalPipeline(Order = 10, ExecutionStage = GlobalPipelineExecutionStage.BeforeHandler)]
+        public async ValueTask<MultiPipelineRes> GlobalPipe1(PipelineContext<MultiPipelineReq> ctx, PipelineDelegate<MultiPipelineReq, MultiPipelineRes> next)
+        {
+            var res = await next(ctx);
+            return new MultiPipelineRes(res.Value.Replace(":GP2:Handler", ":GP1:GP2:Handler"));
+        }
+
+        [GlobalPipeline(Order = 20, ExecutionStage = GlobalPipelineExecutionStage.BeforeHandler)]
+        public async ValueTask<MultiPipelineRes> GlobalPipe2(PipelineContext<MultiPipelineReq> ctx, PipelineDelegate<MultiPipelineReq, MultiPipelineRes> next)
+        {
+            var res = await next(ctx);
+            return new MultiPipelineRes(res.Value.Replace(":Handler", ":GP2:Handler"));
+        }
+    }
+
+    // Interface-based global pipeline for InterfaceTestReq
+    public class InterfaceBasedGlobalPipeline : IGlobalPipeline<InterfaceTestReq, InterfaceTestRes>
+    {
+        [GlobalPipeline(Order = 100, ExecutionStage = GlobalPipelineExecutionStage.BeforeHandler)]
+        public async ValueTask<InterfaceTestRes> HandleGlobalPipeline(PipelineContext<InterfaceTestReq> ctx, PipelineDelegate<InterfaceTestReq, InterfaceTestRes> next)
+        {
+            var res = await next(ctx);
+            return new InterfaceTestRes(res.Value + ":GPINTERFACE");
         }
     }
 }
