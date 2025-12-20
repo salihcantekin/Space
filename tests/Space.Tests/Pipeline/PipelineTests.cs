@@ -8,6 +8,7 @@ using System.Reflection;
 namespace Space.Tests.Pipeline;
 
 [TestClass]
+[DoNotParallelize] // Pipeline tests share state via singletons
 public class PipelineTests
 {
     private ISpace Space;
@@ -55,6 +56,34 @@ public class PipelineTests
 
         [Pipeline(Order = 1)]
         public virtual ValueTask<Res> P1Global(PipelineContext<Req> ctx, PipelineDelegate<Req, Res> next)
+            => P1Func != null ? P1Func(ctx, next) : next(ctx);
+    }
+
+    // Separate types for PipelineContext_Items test to avoid cache conflicts
+    public record ItemsReq(string Text) : Space.Abstraction.Contracts.IRequest<ItemsRes>;
+    public record ItemsRes(string Text);
+
+    public class ItemsTestHandlers
+    {
+        public Func<HandlerContext<ItemsReq>, ValueTask<ItemsRes>> H1Func;
+        public Func<HandlerContext<ItemsReq>, ValueTask<ItemsRes>> H2Func;
+        public Func<PipelineContext<ItemsReq>, PipelineDelegate<ItemsReq, ItemsRes>, ValueTask<ItemsRes>> P1Func;
+        public Func<PipelineContext<ItemsReq>, PipelineDelegate<ItemsReq, ItemsRes>, ValueTask<ItemsRes>> P2Func;
+
+        [Handle(Name = "A")]
+        public virtual ValueTask<ItemsRes> H1(HandlerContext<ItemsReq> ctx)
+            => H1Func != null ? H1Func(ctx) : ValueTask.FromResult(new ItemsRes(ctx.Request.Text + ":H1"));
+
+        [Handle(Name = "B")]
+        public virtual ValueTask<ItemsRes> H2(HandlerContext<ItemsReq> ctx)
+            => H2Func != null ? H2Func(ctx) : ValueTask.FromResult(new ItemsRes(ctx.Request.Text + ":H2"));
+
+        [Pipeline(Order = 2)]
+        public virtual ValueTask<ItemsRes> P2Global(PipelineContext<ItemsReq> ctx, PipelineDelegate<ItemsReq, ItemsRes> next)
+            => P2Func != null ? P2Func(ctx, next) : next(ctx);
+
+        [Pipeline(Order = 1)]
+        public virtual ValueTask<ItemsRes> P1Global(PipelineContext<ItemsReq> ctx, PipelineDelegate<ItemsReq, ItemsRes> next)
             => P1Func != null ? P1Func(ctx, next) : next(ctx);
     }
 
@@ -161,15 +190,15 @@ public class PipelineTests
     [TestMethod]
     public async Task PipelineContext_Items_Are_Shared_Between_Pipelines()
     {
-        // Arrange
+        // Arrange - using separate ItemsReq/ItemsRes types for isolation
         var services = new ServiceCollection();
         services.AddSpace(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
         var sp = services.BuildServiceProvider();
-        Space = sp.GetRequiredService<ISpace>();
-        var handler = sp.GetRequiredService<MultiNamedHandlersWithGlobalPipelines>();
+        var space = sp.GetRequiredService<ISpace>();
+        var handler = sp.GetRequiredService<ItemsTestHandlers>();
 
-        handler.H1Func = ctx => ValueTask.FromResult(new Res(ctx.Request.Text + ":H1"));
-        handler.H2Func = ctx => ValueTask.FromResult(new Res(ctx.Request.Text + ":H2"));
+        handler.H1Func = ctx => ValueTask.FromResult(new ItemsRes(ctx.Request.Text + ":H1"));
+        handler.H2Func = ctx => ValueTask.FromResult(new ItemsRes(ctx.Request.Text + ":H2"));
 
         handler.P1Func = async (ctx, next) =>
         {
@@ -187,7 +216,7 @@ public class PipelineTests
         };
 
         // Act
-        var resDefault = await Space.Send<Req, Res>(new Req("X"));
+        var resDefault = await space.Send<ItemsReq, ItemsRes>(new ItemsReq("X"));
 
         // Assert
         Assert.AreEqual("X:H2:P2=v:P1=v", resDefault.Text);

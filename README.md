@@ -105,6 +105,38 @@ public class LoggingPipeline
 }
 ```
 
+### Global Pipelines
+
+Global pipelines automatically apply to **all handlers** with matching request/response types - ideal for cross-cutting concerns like logging, validation, and exception handling.
+
+```csharp
+public class GlobalLoggingPipeline
+{
+    [GlobalPipeline(Order = 10, ExecutionStage = GlobalPipelineExecutionStage.BeforeHandler)]
+    public async ValueTask<TResponse> Log<TRequest, TResponse>(
+        PipelineContext<TRequest> ctx,
+        PipelineDelegate<TRequest, TResponse> next)
+    {
+        Console.WriteLine($"Handling {typeof(TRequest).Name}");
+        var response = await next(ctx);
+        Console.WriteLine($"Completed {typeof(TRequest).Name}");
+        return response;
+    }
+}
+```
+
+**Key Features:**
+- **Automatic application**: No need to attach to each handler individually
+- **Execution stages**: Control when pipelines run relative to handler-specific pipelines
+  - `BeforeHandler` (default): Outermost layer, runs first
+  - `BeforeHandlerInner`: After handler pipelines, before handler
+  - `AfterHandlerInner`: After handler, before handler pipelines unwind
+  - `AfterHandler`: Outermost post-handler layer
+- **Zero overhead**: When no global pipelines are registered, no performance impact
+- **Type-safe**: Validated at compile time by the source generator
+
+For complete documentation including execution flow, best practices, and common patterns, see [GlobalPipelines.md](docs/GlobalPipelines.md).
+
 ### Notifications
 ```csharp
 public sealed record UserLoggedIn(string UserName);
@@ -173,6 +205,7 @@ For complete details, migration guidance, and troubleshooting, see [MultiProject
 - Minimal boilerplate: annotate methods directly with `[Handle]`, `[Pipeline]`, `[Notification]`
 - Named handlers (multiple strategies for same request/response)
 - Orderable pipelines + early system module execution
+- **Global pipelines** for cross-cutting concerns (logging, validation, exception handling)
 - Extensible module model (e.g., cache) before user pipelines
 - High-performance async signatures (`ValueTask`)
 - Parallel or sequential notification dispatch
@@ -197,6 +230,7 @@ Primary docs in `docs/`:
 | Project Overview | [ProjectDoc.en.md](docs/ProjectDoc.en.md) |
 | Handlers | [Handlers](docs/Handlers.md) |
 | Pipelines | [Pipelines](docs/Pipelines.md) |
+| Global Pipelines | [GlobalPipelines](docs/GlobalPipelines.md) |
 | Notifications | [Notifications](docs/Notifications.md) |
 | Modules | [Modules](docs/Modules.md) |
 | Multi-Project Setup | [MultiProjectSetup](docs/MultiProjectSetup.md) |
@@ -241,12 +275,72 @@ Space is a high-performance, source-generator powered mediator/messaging framewo
 ## Quick links
 - Handlers: docs/Handlers.md
 - Pipelines: docs/Pipelines.md
+- Global Pipelines: docs/GlobalPipelines.md
 - Notifications: docs/Notifications.md
 - Known Issues: docs/KnownIssues.md
 - Developer Recommendations: docs/DeveloperRecommendations.md
 
 ## Build
 See `.github/copilot-instructions.md` for environment and common commands.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

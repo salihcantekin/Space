@@ -165,6 +165,9 @@ public class HandlersCompileWrapperModel
                             c.ClassFullName == handlerCompileModel.ClassFullName);
 
             handlerCompileModel.ModuleCompileModels = [.. moduleTypeMatch];
+
+            // Determine optimal execution mode based on pipeline configuration
+            handlerCompileModel.ExecutionMode = ComputeExecutionMode(handlerCompileModel);
         }
 
         HandlerClassNames = [.. handlerCompileModels
@@ -210,6 +213,41 @@ public class HandlersCompileWrapperModel
                   globalPipelineCompileModels.Any(gp => !gp.IsValueTask);
 
         return this;
+    }
+
+    /// <summary>
+    /// Determines the optimal execution mode for a handler at compile-time.
+    /// </summary>
+    private static HandlerExecutionMode ComputeExecutionMode(HandlersCompileModel h)
+    {
+        int handlerPipelines = h.PipelineCompileModels.Length;
+        int globalPipelines = h.GlobalPipelineCompileModels.Length;
+        int modules = h.ModuleCompileModels.Length;
+
+        // Has global pipelines -> WithGlobalPipelines mode
+        if (globalPipelines > 0)
+            return HandlerExecutionMode.WithGlobalPipelines;
+
+        // Has modules -> Generic mode
+        if (modules > 0)
+            return HandlerExecutionMode.Generic;
+
+        // No pipelines -> Pure mode
+        if (handlerPipelines == 0)
+            return HandlerExecutionMode.Pure;
+
+        // Optimized pipeline counts
+        if (handlerPipelines == 1)
+            return HandlerExecutionMode.SinglePipeline;
+
+        if (handlerPipelines == 2)
+            return HandlerExecutionMode.TwoPipelines;
+
+        if (handlerPipelines == 3)
+            return HandlerExecutionMode.ThreePipelines;
+
+        // 4+ pipelines
+        return HandlerExecutionMode.Generic;
     }
 }
 

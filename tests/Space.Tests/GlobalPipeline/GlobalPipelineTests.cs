@@ -164,9 +164,9 @@ public class GlobalPipelineTests
     }
 
     [TestMethod]
-    public async Task GenericGlobalPipeline_AppliesToAllMatchingHandlers()
+    public async Task GlobalPipeline_AppliesToSpecificRequestResponseType()
     {
-        // Arrange: generic global pipeline should apply to GenericReq/GenericRes
+        // Arrange: specific global pipeline should apply to GenericReq/GenericRes
         var services = new ServiceCollection();
         services.AddSpace(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
         var sp = services.BuildServiceProvider();
@@ -175,7 +175,7 @@ public class GlobalPipelineTests
         // Act
         var res = await Space.Send<GenericReq, GenericRes>(new GenericReq("G"));
 
-        // Assert - generic global pipeline should wrap handler result
+        // Assert - specific global pipeline should wrap handler result
         Assert.AreEqual("G:GenericHandler:GENERICGP", res.Value);
     }
 
@@ -334,24 +334,18 @@ public class GlobalPipelineTests
         }
     }
 
-    // Global pipeline for GenericReq/GenericRes
+    // Global pipeline for GenericReq/GenericRes - now specific instead of generic
+    // Note: For testing generic global pipelines that apply to ALL handlers, 
+    // use a separate test assembly to avoid affecting other tests.
     public class GenericGlobalPipeline
     {
         [GlobalPipeline(Order = 100, ExecutionStage = GlobalPipelineExecutionStage.BeforeHandler)]
-        public async ValueTask<TResponse> HandleGlobalPipeline<TRequest, TResponse>(
-            PipelineContext<TRequest> ctx,
-            PipelineDelegate<TRequest, TResponse> next)
-            where TRequest : notnull
-            where TResponse : notnull
+        public async ValueTask<GenericRes> HandleGlobalPipeline(
+            PipelineContext<GenericReq> ctx,
+            PipelineDelegate<GenericReq, GenericRes> next)
         {
             var res = await next(ctx);
-
-            if (res is GenericRes gr)
-            {
-                return (TResponse)(object)new GenericRes(gr.Value + ":GENERICGP");
-            }
-
-            return res;
+            return new GenericRes(res.Value + ":GENERICGP");
         }
     }
 }

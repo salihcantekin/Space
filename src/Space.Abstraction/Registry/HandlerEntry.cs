@@ -27,7 +27,6 @@ public partial class SpaceRegistry
         // Pipeline storage - separating handler pipelines from global pipelines
         private readonly List<(int Order, PipelineInvoker<TRequest, TResponse> Invoker)> handlerPipelines;
         private readonly List<(int Order, int ExecutionStage, PipelineInvoker<TRequest, TResponse> Invoker)> globalPipelines;
-        private readonly bool hasPipelines;
 
         private readonly object composeLock = new();
         private PipelineInvoker<TRequest, TResponse>[] orderedPipelines;
@@ -41,8 +40,9 @@ public partial class SpaceRegistry
         private PipelineInvoker<TRequest, TResponse> singlePipelineInvoker;
         private PipelineDelegate<TRequest, TResponse> cachedFinalDelegate;
 
-        internal virtual bool IsPipelineFree => !hasPipelines;
-        internal virtual bool HasLightInvoker => lightInvoker != null && !hasPipelines;
+        // Dynamic check for pipeline-free status (supports AddPipeline after construction)
+        internal virtual bool IsPipelineFree => handlerPipelines.Count == 0 && globalPipelines.Count == 0;
+        internal virtual bool HasLightInvoker => lightInvoker != null && IsPipelineFree;
 
         protected HandlerEntry(
             HandlerInvoker<TRequest, TResponse> handlerInvoker,
@@ -74,10 +74,8 @@ public partial class SpaceRegistry
                 }
             }
 
-            hasPipelines = handlerPipelines.Count > 0 || globalPipelines.Count > 0;
-            
             // Pre-compose at construction time for performance
-            if (hasPipelines)
+            if (!IsPipelineFree)
             {
                 EnsureComposed();
             }
@@ -91,11 +89,9 @@ public partial class SpaceRegistry
         internal void AddPipeline(PipelineInvoker<TRequest, TResponse> invoker, PipelineConfig pipelineConfig)
         {
             handlerPipelines.Add((pipelineConfig.Order, invoker));
-            if (!hasPipelines)
-            {
-                // once pipelines are added, this entry is no longer pipeline-free
-                compositionDirty = true;
-            }
+            // Mark composition as dirty so it will be recomposed on next Invoke
+            compositionDirty = true;
+            orderedPipelines = null; // Clear cached ordered list
         }
 
         private PipelineInvoker<TRequest, TResponse>[] GetOrdered()
