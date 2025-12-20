@@ -34,6 +34,9 @@ public class GlobalPipelineTests
     public record AnotherReq(int Value) : IRequest<AnotherRes>;
     public record AnotherRes(int Value);
 
+    public record GenericReq(string Value) : IRequest<GenericRes>;
+    public record GenericRes(string Value);
+
     [TestCleanup]
     public void Cleanup()
     {
@@ -160,6 +163,22 @@ public class GlobalPipelineTests
         Assert.AreEqual(101, res.Value);
     }
 
+    [TestMethod]
+    public async Task GlobalPipeline_AppliesToSpecificRequestResponseType()
+    {
+        // Arrange: specific global pipeline should apply to GenericReq/GenericRes
+        var services = new ServiceCollection();
+        services.AddSpace(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
+        var sp = services.BuildServiceProvider();
+        Space = sp.GetRequiredService<ISpace>();
+
+        // Act
+        var res = await Space.Send<GenericReq, GenericRes>(new GenericReq("G"));
+
+        // Assert - specific global pipeline should wrap handler result
+        Assert.AreEqual("G:GenericHandler:GENERICGP", res.Value);
+    }
+
     // Handlers for BasicTestReq
     public class BasicHandlers
     {
@@ -234,6 +253,14 @@ public class GlobalPipelineTests
             => ValueTask.FromResult(new AnotherRes(ctx.Request.Value + 1));
     }
 
+    // Handlers for GenericReq
+    public class GenericHandlers
+    {
+        [Handle]
+        public ValueTask<GenericRes> GenericHandler(HandlerContext<GenericReq> ctx)
+            => ValueTask.FromResult(new GenericRes(ctx.Request.Value + ":GenericHandler"));
+    }
+
     // Global pipeline for BasicTestReq only
     public class BasicGlobalPipeline
     {
@@ -304,6 +331,21 @@ public class GlobalPipelineTests
         {
             var res = await next(ctx);
             return new InterfaceTestRes(res.Value + ":GPINTERFACE");
+        }
+    }
+
+    // Global pipeline for GenericReq/GenericRes - now specific instead of generic
+    // Note: For testing generic global pipelines that apply to ALL handlers, 
+    // use a separate test assembly to avoid affecting other tests.
+    public class GenericGlobalPipeline
+    {
+        [GlobalPipeline(Order = 100, ExecutionStage = GlobalPipelineExecutionStage.BeforeHandler)]
+        public async ValueTask<GenericRes> HandleGlobalPipeline(
+            PipelineContext<GenericReq> ctx,
+            PipelineDelegate<GenericReq, GenericRes> next)
+        {
+            var res = await next(ctx);
+            return new GenericRes(res.Value + ":GENERICGP");
         }
     }
 }

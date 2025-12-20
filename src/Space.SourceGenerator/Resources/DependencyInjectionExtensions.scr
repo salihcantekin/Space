@@ -30,7 +30,6 @@ namespace Space.DependencyInjection
 
         private static IServiceCollection AddSpaceInternal(IServiceCollection services, SpaceOptions options)
         {
-            // Core registrations (root aggregator)
             services.AddSingleton<ISpace, global::Space.DependencyInjection.Space>();
             services.AddSingleton<ModuleFactory>();
 
@@ -39,23 +38,20 @@ namespace Space.DependencyInjection
             else
                 services.AddSingleton<INotificationDispatcher, SequentialNotificationDispatcher>();
 
-            // Discover assembly-scoped registration helper types generated in referenced projects
             var registrationTypes = AppDomain.CurrentDomain.GetAssemblies()
                 .SelectMany(a => SafeGetTypes(a))
                 .Where(t => t.IsClass && t.IsAbstract && t.IsSealed && t.Name.StartsWith("SpaceAssemblyRegistration_", StringComparison.Ordinal))
                 .ToArray();
 
-            // Register external assembly handler service types BEFORE building provider
             foreach (var rt in registrationTypes)
             {
                 var ms = rt.GetMethod("RegisterAssemblyServices", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
                 if (ms != null)
                 {
-                    try { ms.Invoke(null, new object[] { services, options.ServiceLifetime }); } catch { /* ignore */ }
+                    try { ms.Invoke(null, new object[] { services, options.ServiceLifetime }); } catch { }
                 }
             }
 
-            // Also register handlers belonging to root assembly (current project)
             var handlerTypes = new Type[] {
                 {{ for handler in AllHandlersName }}
                 typeof({{ handler }}),
@@ -70,22 +66,20 @@ namespace Space.DependencyInjection
                 registry.HandlerLifetime = options.ServiceLifetime;
                 bool isSingleton = options.ServiceLifetime == ServiceLifetime.Singleton;
 
-                // Root assembly notifications
                 {{ for n in Notifications }}
                 SpaceRegistrationHelpers.RegisterNotification<{{ n.ClassFullName }}, {{ n.RequestParameterTypeName }}>(
                     registry, sp, isSingleton,
                     (inst, ctx) => inst.{{ n.MethodName }}(ctx));
                 {{ end }}
 
-                // Root assembly handlers with specialized registration based on pipeline count
                 {{ for h in OrderedHandlers }}
-                {{   if h.IsPipelineFree }}
-                // Pipeline-free handler - using LightHandlerEntry
+                {{   if h.ExecutionModeInt == 0 }}
+                // [Pure] {{ h.HandlerName }} - direct handler invocation
                 SpaceRegistrationHelpers.RegisterLightHandler<{{ h.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>(
                     registry, sp, isSingleton, "{{ h.HandlerName }}",
                     (inst, ctx) => {{ if h.IsVoidLike }}SpaceGeneratorRuntimeHelpers.ToNothing(inst.{{ h.MethodName }}(ctx)){{ else }}{{ if h.IsValueTask }}inst.{{ h.MethodName }}(ctx){{ else }}SpaceGeneratorRuntimeHelpers.VT(inst.{{ h.MethodName }}(ctx)){{ end }}{{ end }});
-                {{   else if h.HasSinglePipeline }}
-                // Single pipeline handler - using SinglePipelineEntry (no global pipelines)
+                {{   else if h.ExecutionModeInt == 1 }}
+                // [SinglePipeline] {{ h.HandlerName }}
                 {
                     {{   $p = h.PipelineCompileModels[0] }}
                     var pipe = SpaceRegistrationHelpers.CreatePipelineInvoker<{{ $p.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>(
@@ -96,8 +90,8 @@ namespace Space.DependencyInjection
                         (inst, ctx) => {{ if h.IsVoidLike }}SpaceGeneratorRuntimeHelpers.ToNothing(inst.{{ h.MethodName }}(ctx)){{ else }}{{ if h.IsValueTask }}inst.{{ h.MethodName }}(ctx){{ else }}SpaceGeneratorRuntimeHelpers.VT(inst.{{ h.MethodName }}(ctx)){{ end }}{{ end }},
                         pipe);
                 }
-                {{   else if h.HasTwoPipelines }}
-                // Two pipelines handler - using TwoPipelinesEntry (no global pipelines)
+                {{   else if h.ExecutionModeInt == 2 }}
+                // [TwoPipelines] {{ h.HandlerName }}
                 {
                     var allPipes = new PipelineInvoker<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>[] {
                     {{   for p in h.PipelineCompileModels }}
@@ -111,8 +105,8 @@ namespace Space.DependencyInjection
                         (inst, ctx) => {{ if h.IsVoidLike }}SpaceGeneratorRuntimeHelpers.ToNothing(inst.{{ h.MethodName }}(ctx)){{ else }}{{ if h.IsValueTask }}inst.{{ h.MethodName }}(ctx){{ else }}SpaceGeneratorRuntimeHelpers.VT(inst.{{ h.MethodName }}(ctx)){{ end }}{{ end }},
                         allPipes[0], allPipes[1]);
                 }
-                {{   else if h.HasThreePipelines }}
-                // Three pipelines handler - using ThreePipelinesEntry (no global pipelines)
+                {{   else if h.ExecutionModeInt == 3 }}
+                // [ThreePipelines] {{ h.HandlerName }}
                 {
                     var allPipes = new PipelineInvoker<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>[] {
                     {{   for p in h.PipelineCompileModels }}
@@ -126,8 +120,39 @@ namespace Space.DependencyInjection
                         (inst, ctx) => {{ if h.IsVoidLike }}SpaceGeneratorRuntimeHelpers.ToNothing(inst.{{ h.MethodName }}(ctx)){{ else }}{{ if h.IsValueTask }}inst.{{ h.MethodName }}(ctx){{ else }}SpaceGeneratorRuntimeHelpers.VT(inst.{{ h.MethodName }}(ctx)){{ end }}{{ end }},
                         allPipes[0], allPipes[1], allPipes[2]);
                 }
+                {{   else if h.ExecutionModeInt == 4 }}
+                // [WithGlobalPipelines] {{ h.HandlerName }}
+                {
+                    var pipelines = new System.Collections.Generic.List<(PipelineConfig, PipelineInvoker<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>)>();
+                    {{   for p in h.PipelineCompileModels }}
+                    pipelines.Add((new PipelineConfig(){ Order = {{ p.Order }} },
+                        SpaceRegistrationHelpers.CreatePipelineInvoker<{{ p.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>(
+                            sp, isSingleton,
+                            ({{ p.ClassFullName }} pipe, PipelineContext<{{ h.RequestParameterTypeName }}> ctx, PipelineDelegate<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}> next) => {{ if p.IsVoidLike }}SpaceGeneratorRuntimeHelpers.ToNothing({{ if p.IsValueTask }}pipe.{{ p.MethodName }}(ctx, next).AsTask(){{ else }}pipe.{{ p.MethodName }}(ctx, next){{ end }}){{ else }}{{ if p.IsValueTask }}pipe.{{ p.MethodName }}(ctx, next){{ else }}SpaceGeneratorRuntimeHelpers.VT(pipe.{{ p.MethodName }}(ctx, next)){{ end }}{{ end }})));
+                    {{   end }}
+
+                    var globalPipelines = new System.Collections.Generic.List<(GlobalPipelineConfig, PipelineInvoker<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>)>();
+                    {{   for gp in h.GlobalPipelineCompileModels }}
+                    {{     if gp.IsGeneric }}
+                    globalPipelines.Add((new GlobalPipelineConfig(){ Order = {{ gp.Order }}, ExecutionStage = {{ gp.ExecutionStage }} },
+                        SpaceRegistrationHelpers.CreatePipelineInvoker<{{ gp.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>(
+                            sp, isSingleton,
+                            ({{ gp.ClassFullName }} gpipe, PipelineContext<{{ h.RequestParameterTypeName }}> ctx, PipelineDelegate<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}> next) => gpipe.{{ gp.MethodName }}<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>(ctx, next))));
+                    {{     else }}
+                    globalPipelines.Add((new GlobalPipelineConfig(){ Order = {{ gp.Order }}, ExecutionStage = {{ gp.ExecutionStage }} },
+                        SpaceRegistrationHelpers.CreatePipelineInvoker<{{ gp.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>(
+                            sp, isSingleton,
+                            ({{ gp.ClassFullName }} gpipe, PipelineContext<{{ h.RequestParameterTypeName }}> ctx, PipelineDelegate<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}> next) => {{ if gp.IsVoidLike }}SpaceGeneratorRuntimeHelpers.ToNothing({{ if gp.IsValueTask }}gpipe.{{ gp.MethodName }}(ctx, next).AsTask(){{ else }}gpipe.{{ gp.MethodName }}(ctx, next){{ end }}){{ else }}{{ if gp.IsValueTask }}gpipe.{{ gp.MethodName }}(ctx, next){{ else }}SpaceGeneratorRuntimeHelpers.VT(gpipe.{{ gp.MethodName }}(ctx, next)){{ end }}{{ end }})));
+                    {{     end }}
+                    {{   end }}
+
+                    SpaceRegistrationHelpers.RegisterHandlerWithGlobalPipelines<{{ h.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>(
+                        registry, sp, isSingleton, "{{ h.HandlerName }}",
+                        (inst, ctx) => {{ if h.IsVoidLike }}SpaceGeneratorRuntimeHelpers.ToNothing(inst.{{ h.MethodName }}(ctx)){{ else }}{{ if h.IsValueTask }}inst.{{ h.MethodName }}(ctx){{ else }}SpaceGeneratorRuntimeHelpers.VT(inst.{{ h.MethodName }}(ctx)){{ end }}{{ end }},
+                        pipelines, globalPipelines);
+                }
                 {{   else }}
-                // Generic handler (4+ pipelines, modules, or global pipelines)
+                // [Generic] {{ h.HandlerName }}
                 {
                     var pipelines = new System.Collections.Generic.List<(PipelineConfig, PipelineInvoker<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>)>();
                     {{   for p in h.PipelineCompileModels }}
@@ -137,18 +162,10 @@ namespace Space.DependencyInjection
                             (pipe, ctx, next) => {{ if p.IsVoidLike }}SpaceGeneratorRuntimeHelpers.ToNothing({{ if p.IsValueTask }}pipe.{{ p.MethodName }}(ctx, next).AsTask(){{ else }}pipe.{{ p.MethodName }}(ctx, next){{ end }}){{ else }}{{ if p.IsValueTask }}pipe.{{ p.MethodName }}(ctx, next){{ else }}SpaceGeneratorRuntimeHelpers.VT(pipe.{{ p.MethodName }}(ctx, next)){{ end }}{{ end }})));
                     {{   end }}
 
-                    var globalPipelines = new System.Collections.Generic.List<(GlobalPipelineConfig, PipelineInvoker<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>)>();
-                    {{   for gp in h.GlobalPipelineCompileModels }}
-                    globalPipelines.Add((new GlobalPipelineConfig(){ Order = {{ gp.Order }}, ExecutionStage = {{ gp.ExecutionStage }} },
-                        SpaceRegistrationHelpers.CreatePipelineInvoker<{{ gp.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>(
-                            sp, isSingleton,
-                            (gpipe, ctx, next) => {{ if gp.IsVoidLike }}SpaceGeneratorRuntimeHelpers.ToNothing({{ if gp.IsValueTask }}gpipe.{{ gp.MethodName }}(ctx, next).AsTask(){{ else }}gpipe.{{ gp.MethodName }}(ctx, next){{ end }}){{ else }}{{ if gp.IsValueTask }}gpipe.{{ gp.MethodName }}(ctx, next){{ else }}SpaceGeneratorRuntimeHelpers.VT(gpipe.{{ gp.MethodName }}(ctx, next)){{ end }}{{ end }})));
-                    {{   end }}
-
                     SpaceRegistrationHelpers.RegisterHandlerWithGlobalPipelines<{{ h.ClassFullName }}, {{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>(
                         registry, sp, isSingleton, "{{ h.HandlerName }}",
                         (inst, ctx) => {{ if h.IsVoidLike }}SpaceGeneratorRuntimeHelpers.ToNothing(inst.{{ h.MethodName }}(ctx)){{ else }}{{ if h.IsValueTask }}inst.{{ h.MethodName }}(ctx){{ else }}SpaceGeneratorRuntimeHelpers.VT(inst.{{ h.MethodName }}(ctx)){{ end }}{{ end }},
-                        pipelines, globalPipelines);
+                        pipelines, new System.Collections.Generic.List<(GlobalPipelineConfig, PipelineInvoker<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>)>());
 
                     {{   for m in h.ModuleCompileModels }}
                     SpaceRegistrationHelpers.RegisterModule<{{ h.RequestParameterTypeName }}, {{ h.ReturnTypeName }}>(
@@ -158,13 +175,12 @@ namespace Space.DependencyInjection
                 {{   end }}
                 {{ end }}
 
-                // External assemblies handler registrations
                 foreach (var rt in registrationTypes)
                 {
                     var mh = rt.GetMethod("RegisterAssemblyHandlers", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
                     if (mh != null)
                     {
-                        try { mh.Invoke(null, new object[] { sp, registry, isSingleton }); } catch { /* ignore */ }
+                        try { mh.Invoke(null, new object[] { sp, registry, isSingleton }); } catch { }
                     }
                 }
 

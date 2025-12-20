@@ -43,12 +43,11 @@ public class GlobalPipelineComparisonBenchmark
 
     public class SpaceLoggingPipeline
     {
+        // Changed from generic to specific - only applies to SpaceReq/SpaceRes
         [SpaceAbstraction.Attributes.GlobalPipeline(Order = 5, ExecutionStage = SpaceAbstraction.Attributes.GlobalPipelineExecutionStage.BeforeHandler)]
-        public async ValueTask<TResponse> Log<TRequest, TResponse>(
-            SpaceAbstraction.Context.PipelineContext<TRequest> ctx,
-            SpaceAbstraction.Context.PipelineDelegate<TRequest, TResponse> next)
-            where TRequest : notnull
-            where TResponse : notnull
+        public async ValueTask<SpaceRes> Log(
+            SpaceAbstraction.Context.PipelineContext<SpaceReq> ctx,
+            SpaceAbstraction.Context.PipelineDelegate<SpaceReq, SpaceRes> next)
         {
             _ = ctx.Request.GetType().Name;
             var response = await next(ctx);
@@ -59,14 +58,13 @@ public class GlobalPipelineComparisonBenchmark
 
     public class SpaceValidationPipeline
     {
+        // Changed from generic to specific - only applies to SpaceReq/SpaceRes
         [SpaceAbstraction.Attributes.GlobalPipeline(Order = 10, ExecutionStage = SpaceAbstraction.Attributes.GlobalPipelineExecutionStage.BeforeHandler)]
-        public async ValueTask<TResponse> Validate<TRequest, TResponse>(
-            SpaceAbstraction.Context.PipelineContext<TRequest> ctx,
-            SpaceAbstraction.Context.PipelineDelegate<TRequest, TResponse> next)
-            where TRequest : notnull
-            where TResponse : notnull
+        public async ValueTask<SpaceRes> Validate(
+            SpaceAbstraction.Context.PipelineContext<SpaceReq> ctx,
+            SpaceAbstraction.Context.PipelineDelegate<SpaceReq, SpaceRes> next)
         {
-            if (ctx.Request is SpaceReq req && req.Value < 0)
+            if (ctx.Request.Value < 0)
                 throw new System.InvalidOperationException("Invalid");
             return await next(ctx);
         }

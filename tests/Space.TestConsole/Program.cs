@@ -75,3 +75,5 @@ Log.Add("\n=== Testing Global Pipeline with int (No Validation) ===");
 await space.Send(5);
 
 Log.Add("\nDONE!");
+
+Console.ReadLine();
