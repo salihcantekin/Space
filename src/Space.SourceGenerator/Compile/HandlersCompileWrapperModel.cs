@@ -19,6 +19,7 @@ public class HandlersCompileWrapperModel
 {
     private readonly HashSet<HandlersCompileModel> handlerCompileModels = [];
     private readonly HashSet<PipelineCompileModel> pipelineCompileModels = [];
+    private readonly HashSet<GlobalPipelineCompileModel> globalPipelineCompileModels = [];
     private readonly HashSet<NotificationCompileModel> notificationCompileModels = [];
     private readonly HashSet<ModuleCompileModel> moduleCompileModels = [];
 
@@ -34,11 +35,15 @@ public class HandlersCompileWrapperModel
     public HashSet<NotificationCompileModel> Notifications => notificationCompileModels;
 
     public HashSet<ModuleCompileModel> ModuleCompileModels => moduleCompileModels;
+    
+    public HashSet<GlobalPipelineCompileModel> GlobalPipelineCompileModels => globalPipelineCompileModels;
+    
     public IEnumerable<ModuleProviderCompileModel> ModuleProviders => ModuleCompileModels.Select(i => new ModuleProviderCompileModel(i.ModuleName)).Distinct();
 
 
     public string[] HandlerClassNames { get; private set; }
     public string[] PipelineClassNames { get; private set; }
+    public string[] GlobalPipelineClassNames { get; private set; }
     public string[] NotificationClassNames { get; private set; }
 
     public HashSet<string> AllHandlersName { get; private set; }
@@ -46,12 +51,10 @@ public class HandlersCompileWrapperModel
     // Ordered handlers for registration (default handlers last per Req/Res)
     public List<HandlersCompileModel> OrderedHandlers { get; private set; }
 
-    // Helper usage flags consumed by Scriban templates to suppress generation of unused locals (avoid CS8321 warnings)
-    public bool NeedsReg { get; private set; }
-    public bool NeedsRegLight { get; private set; }
-    public bool NeedsRegPipe { get; private set; }
-    public bool NeedsRegModule { get; private set; }
-    public bool NeedsRegNotification { get; private set; }
+    // Standalone global pipelines (not attached to any specific handler class)
+    public List<GlobalPipelineCompileModel> StandaloneGlobalPipelines { get; private set; }
+
+    // Helper usage flags - now simplified since we use SpaceRegistrationHelpers
     public bool NeedsVT { get; private set; }
 
     public void AddRangeHandlerAttribute(IEnumerable<HandlersCompileModel> models)
@@ -83,6 +86,26 @@ public class HandlersCompileWrapperModel
         }
     }
 
+    public void AddRangeGlobalPipelineAttribute(IEnumerable<GlobalPipelineCompileModel> models)
+    {
+        foreach (var model in models)
+        {
+            // Manual deduplication using key fields since record Equals includes all properties
+            var isDuplicate = globalPipelineCompileModels.Any(existing =>
+                existing.ClassFullName == model.ClassFullName &&
+                existing.MethodName == model.MethodName &&
+                existing.RequestParameterTypeName == model.RequestParameterTypeName &&
+                existing.ReturnTypeName == model.ReturnTypeName &&
+                existing.Order == model.Order &&
+                existing.ExecutionStage == model.ExecutionStage);
+            
+            if (!isDuplicate)
+            {
+                globalPipelineCompileModels.Add(model);
+            }
+        }
+    }
+
     public void AddRangeNotificationAttribute(IEnumerable<NotificationCompileModel> models)
     {
         foreach (var model in models)
@@ -106,9 +129,19 @@ public class HandlersCompileWrapperModel
             var pipelineAllMatches = pipelineNameMatch
                 .Union(pipelineTypeMatch)
                 .Distinct()
-                .OrderBy(i => i.Order); // Order by the pipeline order
+                .OrderBy(i => i.Order);
 
             handlerCompileModel.PipelineCompileModels = [.. pipelineAllMatches];
+
+            // Check if there are global pipelines for this handler's request/response type
+            var globalPipelineMatches = globalPipelineCompileModels
+                .Where(gp => gp.ReturnTypeName == handlerCompileModel.ReturnTypeName
+                          && gp.RequestParameterTypeName == handlerCompileModel.RequestParameterTypeName)
+                .OrderBy(gp => gp.ExecutionStage)
+                .ThenBy(gp => gp.Order)
+                .ToList();
+
+            handlerCompileModel.GlobalPipelineCompileModels = [.. globalPipelineMatches];
 
             var moduleTypeMatch = moduleCompileModels
                 .Where(c => (c.ResponseType.Contains(handlerCompileModel.ReturnTypeName) || handlerCompileModel.ReturnTypeName.Contains(c.ResponseType)) &&
@@ -127,16 +160,24 @@ public class HandlersCompileWrapperModel
         PipelineClassNames = [.. pipelineCompileModels
             .Select(m => m.ClassFullName.Globalize())
             .Except(HandlerClassNames)
-            .Distinct()]; // they might be in the same class
+            .Distinct()];
+
+        GlobalPipelineClassNames = [.. globalPipelineCompileModels
+            .Select(m => m.ClassFullName.Globalize())
+            .Except(HandlerClassNames)
+            .Except(PipelineClassNames)
+            .Distinct()];
 
         NotificationClassNames = [.. notificationCompileModels
             .Select(i => i.ClassFullName.Globalize())
             .Except(HandlerClassNames)
             .Except(PipelineClassNames)
+            .Except(GlobalPipelineClassNames)
             .Distinct()];
 
         AllHandlersName = [.. HandlerClassNames
                                 .Union(PipelineClassNames)
+                                .Union(GlobalPipelineClassNames)
                                 .Union(NotificationClassNames)];
 
         // Compute ordered handlers: non-default first, then default within each (Req, Res)
@@ -144,13 +185,14 @@ public class HandlersCompileWrapperModel
             .GroupBy(h => (h.RequestParameterTypeName, h.ReturnTypeName))
             .SelectMany(g => g.OrderBy(h => h.IsDefault ? 1 : 0))];
 
-        // Flags: use per-handler attachment, not global collection counts, to avoid unused helper generation
-        NeedsRegNotification = notificationCompileModels.Count > 0;
-        NeedsRegPipe = handlerCompileModels.Any(h => h.PipelineCompileModels.Length > 0);
-        NeedsRegModule = handlerCompileModels.Any(h => h.ModuleCompileModels.Length > 0);
-        NeedsReg = handlerCompileModels.Any(h => h.PipelineCompileModels.Length > 0 || h.ModuleCompileModels.Length > 0);
-        NeedsRegLight = handlerCompileModels.Any(h => h.PipelineCompileModels.Length == 0 && h.ModuleCompileModels.Length == 0);
-        NeedsVT = handlerCompileModels.Any(h => !h.IsValueTask) || pipelineCompileModels.Any(p => !p.IsValueTask);
+        // Standalone global pipelines are no longer needed - all global pipelines
+        // will be registered centrally via GlobalPipelineCompileModels
+        StandaloneGlobalPipelines = [];
+
+        // Only need VT flag now since other helpers are in SpaceRegistrationHelpers
+        NeedsVT = handlerCompileModels.Any(h => !h.IsValueTask) || 
+                  pipelineCompileModels.Any(p => !p.IsValueTask) || 
+                  globalPipelineCompileModels.Any(gp => !gp.IsValueTask);
 
         return this;
     }

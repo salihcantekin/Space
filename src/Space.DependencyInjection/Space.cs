@@ -5,12 +5,23 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using Space.Abstraction;
 using Space.Abstraction.Contracts;
+using Space.Abstraction.Context;
+using Space.Abstraction.Registry;
 
 namespace Space.DependencyInjection;
 
-public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFactory) : ISpace
+public sealed class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFactory) : ISpace
 {
     private readonly SpaceRegistry spaceRegistry = rootProvider.GetRequiredService<SpaceRegistry>();
+
+    // Ultra-fast path: Direct invoker delegate cache for pipeline-free singleton handlers
+    // This completely bypasses HandlerEntry virtual calls
+    private static class DirectInvokerCache<TReq, TRes>
+    {
+        internal static LightHandlerInvoker<TReq, TRes> LightInvoker; // Direct delegate, no virtual call
+        internal static bool IsLight; // true if pipeline-free
+        internal static bool Initialized;
+    }
 
     private static class EntryCache<TReq, TRes>
     {
@@ -18,11 +29,6 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
         internal static SpaceRegistry.HandlerEntry<TReq, TRes> NamedEntry;     // last named fast path
         internal static string NamedKey;                                       // last name used
         internal static bool Initialized;
-    }
-
-    private static class ObjectEntryCache
-    {
-        internal static readonly Dictionary<(Type, string), object> Fast = [];
     }
 
     private static class GenericDispatcherCache<TRes>
@@ -76,6 +82,78 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private ValueTask<TResponse> SendCore<TRequest, TResponse>(in TRequest request, string name, CancellationToken ct)
+        where TRequest : notnull
+        where TResponse : notnull
+    {
+        // ULTRA-FAST PATH: Singleton/Transient + unnamed + pipeline-free
+        // Uses direct delegate invocation - NO virtual calls
+        if (string.IsNullOrEmpty(name) && IsFastPath(spaceRegistry.HandlerLifetime))
+        {
+            // Hot path: Already initialized and is light handler
+            if (DirectInvokerCache<TRequest, TResponse>.Initialized)
+            {
+                if (DirectInvokerCache<TRequest, TResponse>.IsLight)
+                {
+                    // Single cancellation check - ThrowIfCancellationRequested handles both
+                    ct.ThrowIfCancellationRequested();
+                    var lctx = new LightHandlerContext<TRequest>(request, rootProvider, this, ct);
+                    return DirectInvokerCache<TRequest, TResponse>.LightInvoker(in lctx);
+                }
+                // Not light - fall through to standard path (has pipelines)
+            }
+            else
+            {
+                // Cold path: Initialize cache (NoInlining to keep hot path small)
+                return InitializeAndInvoke<TRequest, TResponse>(in request, ct);
+            }
+        }
+
+        // Standard path (named handlers, pipeline handlers, scoped)
+        return SendCoreStandard<TRequest, TResponse>(in request, name, ct);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private ValueTask<TResponse> InitializeAndInvoke<TRequest, TResponse>(in TRequest request, CancellationToken ct)
+        where TRequest : notnull
+        where TResponse : notnull
+    {
+        if (spaceRegistry.TryGetHandlerEntry<TRequest, TResponse>(null, out var entry))
+        {
+            EntryCache<TRequest, TResponse>.Entry = entry;
+            EntryCache<TRequest, TResponse>.Initialized = true;
+
+            // Try to extract direct light invoker from LightHandlerEntry
+            if (entry is SpaceRegistry.LightHandlerEntry<TRequest, TResponse> lightEntry)
+            {
+                DirectInvokerCache<TRequest, TResponse>.LightInvoker = lightEntry.GetLightInvoker();
+                DirectInvokerCache<TRequest, TResponse>.IsLight = true;
+                DirectInvokerCache<TRequest, TResponse>.Initialized = true;
+
+                ct.ThrowIfCancellationRequested();
+                var lctx = new LightHandlerContext<TRequest>(request, rootProvider, this, ct);
+                return DirectInvokerCache<TRequest, TResponse>.LightInvoker(in lctx);
+            }
+            
+            DirectInvokerCache<TRequest, TResponse>.IsLight = false;
+            DirectInvokerCache<TRequest, TResponse>.Initialized = true;
+
+            // Has pipelines - invoke through entry
+            if (entry.HasLightInvoker)
+                return entry.InvokeLight(rootProvider, this, request, ct);
+
+            var ctx = HandlerContext<TRequest>.Create(rootProvider, request, ct);
+            return entry.Invoke(ctx).AwaitAndReturnHandlerInvoke(ctx);
+        }
+        
+        DirectInvokerCache<TRequest, TResponse>.IsLight = false;
+        DirectInvokerCache<TRequest, TResponse>.Initialized = true;
+        
+        // No handler found - fall through to standard path which will throw
+        return SendCoreStandard<TRequest, TResponse>(in request, null, ct);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private ValueTask<TResponse> SendCoreStandard<TRequest, TResponse>(in TRequest request, string name, CancellationToken ct)
         where TRequest : notnull
         where TResponse : notnull
     {
@@ -298,7 +376,7 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
     {
         var vt = Send<Nothing>(request, name, ct);
         if (vt.IsCompletedSuccessfully)
-            return new ValueTask();
+            return default;
         return Await(vt);
 
         static async ValueTask Await(ValueTask<Nothing> inner)
@@ -409,6 +487,4 @@ public class Space(IServiceProvider rootProvider, IServiceScopeFactory scopeFact
     }
 
     #endregion
-
-
 }

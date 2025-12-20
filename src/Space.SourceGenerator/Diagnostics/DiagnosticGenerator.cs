@@ -23,6 +23,9 @@ internal class DiagnosticGenerator
         new MissingPipelineAttributeRule(),
         new PipelineAttributeRule(),
         new PipelineVoidConflictRule(),
+
+        // Global pipeline rules
+        new GlobalPipelineAttributeRule(),
         // SEND001 disabled for now (kept in code for future use)
         // new SendGenericResponseMismatchRule()
     ];

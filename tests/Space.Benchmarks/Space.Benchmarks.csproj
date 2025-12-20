@@ -4,10 +4,11 @@
 		<OutputType>Exe</OutputType>
 		<TargetFramework>net8.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
+		<SpaceGenerateRootAggregator>true</SpaceGenerateRootAggregator>
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <Compile Remove="C:\Users\SC-PC\.nuget\packages\microsoft.visualstudio.diagnosticshub.benchmarkdotnetdiagnosers\18.0.36421.1\contentFiles\cs\any\BenchmarkProfilerAgentConfig.g.cs" />
+		<Compile Remove="C:\Users\SC-PC\.nuget\packages\microsoft.visualstudio.diagnosticshub.benchmarkdotnetdiagnosers\18.0.36421.1\contentFiles\cs\any\BenchmarkProfilerAgentConfig.g.cs" />
 	</ItemGroup>
 
 	<!--<PropertyGroup>
@@ -29,10 +30,12 @@
 	<ItemGroup>
 		<ProjectReference Include="..\..\src\Space.Abstraction\Space.Abstraction.csproj" />
 		<ProjectReference Include="..\..\src\Space.DependencyInjection\Space.DependencyInjection.csproj" />
+		<ProjectReference Include="..\..\src\Space.SourceGenerator\Space.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Folder Include="BenchmarkResults\" />
+		<Folder Include="BenchmarkResults\" />
 	</ItemGroup>
 
 </Project>

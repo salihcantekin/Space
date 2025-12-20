@@ -52,6 +52,11 @@ public partial class SpaceRegistry
         handlerRegistry.RegisterPipeline(handlerName, pipelineConfig, pipeline);
     }
 
+    public void RegisterGlobalPipeline<TRequest, TResponse>(GlobalPipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)
+    {
+        handlerRegistry.RegisterGlobalPipeline(config, invoker);
+    }
+
     public void RegisterHandler<TRequest, TResponse>(
         HandlerInvoker<TRequest, TResponse> handler,
         string name = "",
@@ -59,6 +64,57 @@ public partial class SpaceRegistry
         LightHandlerInvoker<TRequest, TResponse> lightInvoker = null)
     {
         handlerRegistry.RegisterHandler(handler, name, pipelines, lightInvoker);
+    }
+
+    /// <summary>
+    /// Register a pipeline-free handler using the optimized LightHandlerEntry.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void RegisterLightHandler<TRequest, TResponse>(
+        HandlerInvoker<TRequest, TResponse> handler,
+        string name,
+        LightHandlerInvoker<TRequest, TResponse> lightInvoker)
+    {
+        handlerRegistry.RegisterLightHandler(handler, name, lightInvoker);
+    }
+
+    /// <summary>
+    /// Register a handler with exactly one pipeline using SinglePipelineEntry.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void RegisterSinglePipelineHandler<TRequest, TResponse>(
+        HandlerInvoker<TRequest, TResponse> handler,
+        string name,
+        PipelineInvoker<TRequest, TResponse> pipeline)
+    {
+        handlerRegistry.RegisterSinglePipelineHandler(handler, name, pipeline);
+    }
+
+    /// <summary>
+    /// Register a handler with exactly two pipelines using TwoPipelinesEntry.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void RegisterTwoPipelinesHandler<TRequest, TResponse>(
+        HandlerInvoker<TRequest, TResponse> handler,
+        string name,
+        PipelineInvoker<TRequest, TResponse> pipeline1,
+        PipelineInvoker<TRequest, TResponse> pipeline2)
+    {
+        handlerRegistry.RegisterTwoPipelinesHandler(handler, name, pipeline1, pipeline2);
+    }
+
+    /// <summary>
+    /// Register a handler with exactly three pipelines using ThreePipelinesEntry.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void RegisterThreePipelinesHandler<TRequest, TResponse>(
+        HandlerInvoker<TRequest, TResponse> handler,
+        string name,
+        PipelineInvoker<TRequest, TResponse> pipeline1,
+        PipelineInvoker<TRequest, TResponse> pipeline2,
+        PipelineInvoker<TRequest, TResponse> pipeline3)
+    {
+        handlerRegistry.RegisterThreePipelinesHandler(handler, name, pipeline1, pipeline2, pipeline3);
     }
 
     public void RegisterModule<TRequest, TResponse>(string moduleName, string handlerName = "", string profileName = "")
@@ -75,6 +131,19 @@ public partial class SpaceRegistry
 
         handlerRegistry.RegisterPipeline<TRequest, TResponse>(handlerName, new PipelineConfig(order),
             (ctx, next) => moduleFactory.Invoke<TRequest, TResponse>(moduleName, profileName, ctx, next));
+    }
+
+    /// <summary>
+    /// Register a handler with both handler pipelines and global pipelines.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void RegisterHandlerWithGlobalPipelines<TRequest, TResponse>(
+        HandlerInvoker<TRequest, TResponse> handler,
+        string name,
+        IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelines,
+        IEnumerable<(GlobalPipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> globalPipelines)
+    {
+        handlerRegistry.RegisterHandlerWithGlobalPipelines(handler, name, pipelines, globalPipelines);
     }
 
     // Lightweight handler entry access for fast path
@@ -141,6 +210,7 @@ public partial class SpaceRegistry
         ValueTask<object> InvokeObject(HandlerContextStruct handlerContext);
     }
 
+    // Legacy struct kept for compatibility - new code uses PipelineContainers.cs structs
     internal struct PipelineContainer<TRequest, TResponse>(PipelineConfig pipelineConfig, Func<PipelineContext<TRequest>, PipelineDelegate<TRequest, TResponse>, ValueTask<TResponse>> pipelineHandler)
     {
         internal PipelineConfig PipelineConfig { get; set; } = pipelineConfig;

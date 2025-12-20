@@ -22,6 +22,7 @@ public static class Program
         try
         {
             WriteMeta(outputDir, summaries);
+            RenameReportsToShortNames(outputDir);
             Console.WriteLine($"Benchmark reports written to: {outputDir}");
         }
         catch (Exception ex)
@@ -48,6 +49,57 @@ public static class Program
             .AddExporter(MarkdownExporter.GitHub); // Only markdown
 
         return cfg;
+    }
+
+    /// <summary>
+    /// Renames benchmark report files from full namespace format to short class name format.
+    /// Example: "Space.Benchmarks.Handler.ObjectSendBench-report-github.md" -> "ObjectSendBench-report-github.md"
+    /// </summary>
+    private static void RenameReportsToShortNames(string outputDir)
+    {
+        var resultsDir = Path.Combine(outputDir, "results");
+        if (!Directory.Exists(resultsDir))
+            return;
+
+        var mdFiles = Directory.GetFiles(resultsDir, "*-report-github.md");
+        
+        foreach (var filePath in mdFiles)
+        {
+            var fileName = Path.GetFileName(filePath);
+            
+            // Extract the part before "-report-github.md"
+            var suffix = "-report-github.md";
+            if (!fileName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var benchmarkName = fileName[..^suffix.Length];
+            
+            // Get just the class name (last part after the last dot)
+            var lastDotIndex = benchmarkName.LastIndexOf('.');
+            if (lastDotIndex < 0)
+                continue; // Already short name, skip
+                
+            var shortName = benchmarkName[(lastDotIndex + 1)..];
+            var newFileName = $"{shortName}{suffix}";
+            var newFilePath = Path.Combine(resultsDir, newFileName);
+
+            // Don't overwrite if target exists (avoid conflicts)
+            if (File.Exists(newFilePath))
+            {
+                Console.WriteLine($"Skipping rename: {newFileName} already exists");
+                continue;
+            }
+
+            try
+            {
+                File.Move(filePath, newFilePath);
+                Console.WriteLine($"Renamed: {fileName} -> {newFileName}");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Failed to rename {fileName}: {ex.Message}");
+            }
+        }
     }
 
     private static void WriteMeta(string outputDir, IEnumerable<Summary> summaries)
@@ -78,7 +130,11 @@ public static class Program
 
         foreach (var s in summaries)
         {
-            var md = $"{s.Title}-report-github.md";
+            // Use short name (class name only) in meta report
+            var fullName = s.Title;
+            var lastDotIndex = fullName.LastIndexOf('.');
+            var shortName = lastDotIndex >= 0 ? fullName[(lastDotIndex + 1)..] : fullName;
+            var md = $"{shortName}-report-github.md";
 
             sw.WriteLine($"- {md}");
         }
