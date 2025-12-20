@@ -27,7 +27,7 @@ public partial class SpaceRegistry
         // Pipeline storage - separating handler pipelines from global pipelines
         private readonly List<(int Order, PipelineInvoker<TRequest, TResponse> Invoker)> handlerPipelines;
         private readonly List<(int Order, int ExecutionStage, PipelineInvoker<TRequest, TResponse> Invoker)> globalPipelines;
-        private bool hasPipelines;
+        private readonly bool hasPipelines;
 
         private readonly object composeLock = new();
         private PipelineInvoker<TRequest, TResponse>[] orderedPipelines;
@@ -41,7 +41,6 @@ public partial class SpaceRegistry
         private PipelineInvoker<TRequest, TResponse> singlePipelineInvoker;
         private PipelineDelegate<TRequest, TResponse> cachedFinalDelegate;
 
-        // Virtual properties so specialized entries can override
         internal virtual bool IsPipelineFree => !hasPipelines;
         internal virtual bool HasLightInvoker => lightInvoker != null && !hasPipelines;
 
@@ -92,9 +91,11 @@ public partial class SpaceRegistry
         internal void AddPipeline(PipelineInvoker<TRequest, TResponse> invoker, PipelineConfig pipelineConfig)
         {
             handlerPipelines.Add((pipelineConfig.Order, invoker));
-            hasPipelines = true;
-            orderedPipelines = null;
-            compositionDirty = true;
+            if (!hasPipelines)
+            {
+                // once pipelines are added, this entry is no longer pipeline-free
+                compositionDirty = true;
+            }
         }
 
         private PipelineInvoker<TRequest, TResponse>[] GetOrdered()
@@ -168,6 +169,7 @@ public partial class SpaceRegistry
 
                 if (totalPipelines == 0)
                 {
+                    // Pipeline-free: composed invoke is just the handler
                     composedInvoke = handlerInvoker;
                 }
                 else
@@ -254,6 +256,12 @@ public partial class SpaceRegistry
         public virtual ValueTask<TResponse> Invoke(HandlerContext<TRequest> handlerContext)
         {
             handlerContext.CancellationToken.ThrowIfCancellationRequested();
+
+            // Ultra-fast path: no pipelines or global pipelines attached
+            if (IsPipelineFree)
+            {
+                return handlerInvoker(handlerContext);
+            }
             
             if (compositionDirty)
                 EnsureComposed();

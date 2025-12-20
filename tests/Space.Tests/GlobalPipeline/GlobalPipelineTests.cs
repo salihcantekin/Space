@@ -34,6 +34,9 @@ public class GlobalPipelineTests
     public record AnotherReq(int Value) : IRequest<AnotherRes>;
     public record AnotherRes(int Value);
 
+    public record GenericReq(string Value) : IRequest<GenericRes>;
+    public record GenericRes(string Value);
+
     [TestCleanup]
     public void Cleanup()
     {
@@ -160,6 +163,22 @@ public class GlobalPipelineTests
         Assert.AreEqual(101, res.Value);
     }
 
+    [TestMethod]
+    public async Task GenericGlobalPipeline_AppliesToAllMatchingHandlers()
+    {
+        // Arrange: generic global pipeline should apply to GenericReq/GenericRes
+        var services = new ServiceCollection();
+        services.AddSpace(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);
+        var sp = services.BuildServiceProvider();
+        Space = sp.GetRequiredService<ISpace>();
+
+        // Act
+        var res = await Space.Send<GenericReq, GenericRes>(new GenericReq("G"));
+
+        // Assert - generic global pipeline should wrap handler result
+        Assert.AreEqual("G:GenericHandler:GENERICGP", res.Value);
+    }
+
     // Handlers for BasicTestReq
     public class BasicHandlers
     {
@@ -234,6 +253,14 @@ public class GlobalPipelineTests
             => ValueTask.FromResult(new AnotherRes(ctx.Request.Value + 1));
     }
 
+    // Handlers for GenericReq
+    public class GenericHandlers
+    {
+        [Handle]
+        public ValueTask<GenericRes> GenericHandler(HandlerContext<GenericReq> ctx)
+            => ValueTask.FromResult(new GenericRes(ctx.Request.Value + ":GenericHandler"));
+    }
+
     // Global pipeline for BasicTestReq only
     public class BasicGlobalPipeline
     {
@@ -304,6 +331,27 @@ public class GlobalPipelineTests
         {
             var res = await next(ctx);
             return new InterfaceTestRes(res.Value + ":GPINTERFACE");
+        }
+    }
+
+    // Global pipeline for GenericReq/GenericRes
+    public class GenericGlobalPipeline
+    {
+        [GlobalPipeline(Order = 100, ExecutionStage = GlobalPipelineExecutionStage.BeforeHandler)]
+        public async ValueTask<TResponse> HandleGlobalPipeline<TRequest, TResponse>(
+            PipelineContext<TRequest> ctx,
+            PipelineDelegate<TRequest, TResponse> next)
+            where TRequest : notnull
+            where TResponse : notnull
+        {
+            var res = await next(ctx);
+
+            if (res is GenericRes gr)
+            {
+                return (TResponse)(object)new GenericRes(gr.Value + ":GENERICGP");
+            }
+
+            return res;
         }
     }
 }

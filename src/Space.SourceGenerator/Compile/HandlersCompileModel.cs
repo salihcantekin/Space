@@ -29,9 +29,14 @@ public record HandlersCompileModel(string HandlerName) : BaseCompileModel
     public int HandlerPipelineCount => PipelineCompileModels.Length;
 
     /// <summary>
-    /// True if this handler has no pipelines at all (can use LightHandlerEntry)
+    /// True if this handler has no pipelines at all (can use LightHandlerEntry or pure fast path).
     /// </summary>
     public bool IsPipelineFree => TotalPipelineCount == 0;
+
+    /// <summary>
+    /// True if this handler has any global pipelines attached.
+    /// </summary>
+    public bool HasGlobalPipelines => GlobalPipelineCompileModels.Length > 0;
 
     /// <summary>
     /// True if handler has exactly one handler-specific pipeline and no global pipelines or modules.
