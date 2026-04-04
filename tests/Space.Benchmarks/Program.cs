@@ -62,23 +62,23 @@ public static class Program
             return;
 
         var mdFiles = Directory.GetFiles(resultsDir, "*-report-github.md");
-        
+
         foreach (var filePath in mdFiles)
         {
             var fileName = Path.GetFileName(filePath);
-            
+
             // Extract the part before "-report-github.md"
             var suffix = "-report-github.md";
             if (!fileName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
                 continue;
 
             var benchmarkName = fileName[..^suffix.Length];
-            
+
             // Get just the class name (last part after the last dot)
             var lastDotIndex = benchmarkName.LastIndexOf('.');
             if (lastDotIndex < 0)
                 continue; // Already short name, skip
-                
+
             var shortName = benchmarkName[(lastDotIndex + 1)..];
             var newFileName = $"{shortName}{suffix}";
             var newFilePath = Path.Combine(resultsDir, newFileName);

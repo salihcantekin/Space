@@ -168,13 +168,13 @@ public static class ServiceCollectionExtensions
                 {
                     var ps = m.GetParameters();
 
-                    if (ps.Length == 0) 
-                        return false;
-                    
-                    if (!typeof(IServiceCollection).IsAssignableFrom(ps[0].ParameterType)) 
+                    if (ps.Length == 0)
                         return false;
 
-                    if (ps.Length == 2 && !allowConfigure) 
+                    if (!typeof(IServiceCollection).IsAssignableFrom(ps[0].ParameterType))
+                        return false;
+
+                    if (ps.Length == 2 && !allowConfigure)
                         return false;
 
                     return true;
@@ -228,13 +228,13 @@ public static class ServiceCollectionExtensions
 
     private static void PreloadUserAssemblies()
     {
-        if (userAssembliesPreloaded) 
+        if (userAssembliesPreloaded)
             return;
 
         userAssembliesPreloaded = true;
 
         var entry = Assembly.GetEntryAssembly();
-        if (entry == null) 
+        if (entry == null)
             return;
 
         var skipPrefixes = new string[] { "System", "Microsoft", "mscorlib", "netstandard", "Windows" };
@@ -255,10 +255,10 @@ public static class ServiceCollectionExtensions
             var an = q.Dequeue();
             var name = an.Name;
 
-            if (loaded.ContainsKey(name)) 
+            if (loaded.ContainsKey(name))
                 continue;
 
-            if (skipPrefixes.Any(p => name.StartsWith(p, StringComparison.Ordinal))) 
+            if (skipPrefixes.Any(p => name.StartsWith(p, StringComparison.Ordinal)))
                 continue;
 
             try
@@ -283,27 +283,27 @@ public static class ServiceCollectionExtensions
     #region Utilities
     private static IEnumerable<Type> SafeGetTypes(Assembly assembly)
     {
-        try 
-        { 
-            return assembly.GetTypes(); 
+        try
+        {
+            return assembly.GetTypes();
         }
-        catch (ReflectionTypeLoadException ex) 
-        { 
-            return ex.Types.Where(t => t is not null)!; 
+        catch (ReflectionTypeLoadException ex)
+        {
+            return ex.Types.Where(t => t is not null)!;
         }
-        catch 
-        { 
-            return []; 
+        catch
+        {
+            return [];
         }
     }
 
     private static void TryLoad(Action load)
     {
-        try 
-        { 
-            load(); 
+        try
+        {
+            load();
         }
-        catch 
+        catch
         {
         }
     }

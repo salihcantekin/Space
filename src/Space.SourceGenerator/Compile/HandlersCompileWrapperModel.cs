@@ -35,9 +35,9 @@ public class HandlersCompileWrapperModel
     public HashSet<NotificationCompileModel> Notifications => notificationCompileModels;
 
     public HashSet<ModuleCompileModel> ModuleCompileModels => moduleCompileModels;
-    
+
     public HashSet<GlobalPipelineCompileModel> GlobalPipelineCompileModels => globalPipelineCompileModels;
-    
+
     public IEnumerable<ModuleProviderCompileModel> ModuleProviders => ModuleCompileModels.Select(i => new ModuleProviderCompileModel(i.ModuleName)).Distinct();
 
 
@@ -98,7 +98,7 @@ public class HandlersCompileWrapperModel
                 existing.ReturnTypeName == model.ReturnTypeName &&
                 existing.Order == model.Order &&
                 existing.ExecutionStage == model.ExecutionStage);
-            
+
             if (!isDuplicate)
             {
                 globalPipelineCompileModels.Add(model);
@@ -208,8 +208,8 @@ public class HandlersCompileWrapperModel
         StandaloneGlobalPipelines = [];
 
         // Only need VT flag now since other helpers are in SpaceRegistrationHelpers
-        NeedsVT = handlerCompileModels.Any(h => !h.IsValueTask) || 
-                  pipelineCompileModels.Any(p => !p.IsValueTask) || 
+        NeedsVT = handlerCompileModels.Any(h => !h.IsValueTask) ||
+                  pipelineCompileModels.Any(p => !p.IsValueTask) ||
                   globalPipelineCompileModels.Any(gp => !gp.IsValueTask);
 
         return this;

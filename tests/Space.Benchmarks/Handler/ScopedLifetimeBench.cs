@@ -36,7 +36,7 @@ public class ScopedLifetimeBench
         // ============================================
         // SINGLETON SETUP
         // ============================================
-        
+
         // Space Singleton
         var spSingletonServices = new ServiceCollection();
         spSingletonServices.AddSpace(opt => opt.ServiceLifetime = ServiceLifetime.Singleton);

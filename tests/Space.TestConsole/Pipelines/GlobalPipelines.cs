@@ -2,7 +2,7 @@ using Space.Abstraction.Attributes;
 using Space.Abstraction.Context;
 using Space.Abstraction.Contracts;
 
-namespace Space.TestConsole;
+namespace Space.TestConsole.Pipelines;
 
 /// <summary>
 /// Global validation pipeline that validates all requests implementing IValidatable.
@@ -29,7 +29,7 @@ public class GlobalValidationPipeline
                 Log.Add($"[GlobalValidationPipeline] ? Validation failed: {errorMessage}");
                 throw new ValidationException(errorMessage);
             }
-            
+
             Log.Add($"[GlobalValidationPipeline] ? Validation passed");
         }
         else
@@ -56,7 +56,7 @@ public class GlobalExceptionHandlerPipeline
         where TResponse : notnull
     {
         Log.Add($"[GlobalExceptionHandler] Entering request: {typeof(TRequest).Name}");
-        
+
         try
         {
             var response = await next(ctx);

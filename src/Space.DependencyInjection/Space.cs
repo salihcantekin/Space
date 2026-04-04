@@ -100,7 +100,7 @@ public sealed class Space(IServiceProvider rootProvider, IServiceScopeFactory sc
                 // Has pipelines - use entry path
                 return SendViaEntry<TRequest, TResponse>(in request, ct);
             }
-            
+
             // Cold path: Initialize and invoke
             return InitializeAndInvoke<TRequest, TResponse>(in request, ct);
         }
@@ -116,7 +116,7 @@ public sealed class Space(IServiceProvider rootProvider, IServiceScopeFactory sc
     {
         ct.ThrowIfCancellationRequested();
         var entry = EntryCache<TRequest, TResponse>.Entry;
-        
+
         if (entry.HasLightInvoker)
             return entry.InvokeLight(rootProvider, this, request, ct);
 
@@ -145,16 +145,16 @@ public sealed class Space(IServiceProvider rootProvider, IServiceScopeFactory sc
                 return DirectInvokerCache<TRequest, TResponse>.LightInvoker(
                     new LightHandlerContext<TRequest>(request, rootProvider, this, ct));
             }
-            
+
             DirectInvokerCache<TRequest, TResponse>.IsLight = false;
             DirectInvokerCache<TRequest, TResponse>.Initialized = true;
 
             return SendViaEntry<TRequest, TResponse>(in request, ct);
         }
-        
+
         DirectInvokerCache<TRequest, TResponse>.IsLight = false;
         DirectInvokerCache<TRequest, TResponse>.Initialized = true;
-        
+
         // No handler found - fall through to standard path which will throw
         return SendCoreStandard<TRequest, TResponse>(in request, null, ct);
     }

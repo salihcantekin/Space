@@ -9,19 +9,19 @@ public enum HandlerExecutionMode
 {
     /// <summary>No pipelines, no global pipelines, no modules - direct handler invocation.</summary>
     Pure = 0,
-    
+
     /// <summary>Exactly one handler-specific pipeline, no global pipelines or modules.</summary>
     SinglePipeline = 1,
-    
+
     /// <summary>Exactly two handler-specific pipelines, no global pipelines or modules.</summary>
     TwoPipelines = 2,
-    
+
     /// <summary>Exactly three handler-specific pipelines, no global pipelines or modules.</summary>
     ThreePipelines = 3,
-    
+
     /// <summary>Has global pipelines attached (with or without handler pipelines).</summary>
     WithGlobalPipelines = 4,
-    
+
     /// <summary>4+ pipelines or has modules - uses generic composed pipeline chain.</summary>
     Generic = 5
 }
@@ -76,31 +76,31 @@ public record HandlersCompileModel(string HandlerName) : BaseCompileModel
     /// True if handler has exactly one handler-specific pipeline and no global pipelines or modules.
     /// Can use SinglePipelineEntry for optimal performance.
     /// </summary>
-    public bool HasSinglePipeline => PipelineCompileModels.Length == 1 && 
-                                      GlobalPipelineCompileModels.Length == 0 && 
+    public bool HasSinglePipeline => PipelineCompileModels.Length == 1 &&
+                                      GlobalPipelineCompileModels.Length == 0 &&
                                       ModuleCompileModels.Length == 0;
 
     /// <summary>
     /// True if handler has exactly two handler-specific pipelines and no global pipelines or modules.
     /// Can use TwoPipelinesEntry for optimal performance.
     /// </summary>
-    public bool HasTwoPipelines => PipelineCompileModels.Length == 2 && 
-                                    GlobalPipelineCompileModels.Length == 0 && 
+    public bool HasTwoPipelines => PipelineCompileModels.Length == 2 &&
+                                    GlobalPipelineCompileModels.Length == 0 &&
                                     ModuleCompileModels.Length == 0;
 
     /// <summary>
     /// True if handler has exactly three handler-specific pipelines and no global pipelines or modules.
     /// Can use ThreePipelinesEntry for optimal performance.
     /// </summary>
-    public bool HasThreePipelines => PipelineCompileModels.Length == 3 && 
-                                      GlobalPipelineCompileModels.Length == 0 && 
+    public bool HasThreePipelines => PipelineCompileModels.Length == 3 &&
+                                      GlobalPipelineCompileModels.Length == 0 &&
                                       ModuleCompileModels.Length == 0;
 
     /// <summary>
     /// True if handler needs generic registration (4+ pipelines, has modules, or has global pipelines)
     /// </summary>
-    public bool NeedsGenericRegistration => TotalPipelineCount > 3 || 
-                                            ModuleCompileModels.Length > 0 || 
+    public bool NeedsGenericRegistration => TotalPipelineCount > 3 ||
+                                            ModuleCompileModels.Length > 0 ||
                                             GlobalPipelineCompileModels.Length > 0;
 
     public override int GetHashCode() => ToString().GetHashCode();

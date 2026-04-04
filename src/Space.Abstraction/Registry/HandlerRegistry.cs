@@ -15,7 +15,7 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
     private Dictionary<HandlerKey, object> handlerMap = new(HandlerKeyComparer.Instance);
     private Dictionary<TypePairKey, object> handlerMapByType = new(TypePairKeyComparer.Instance);
     private Dictionary<TypePairKey, List<GlobalPipelineContainerInternal>> globalPipelineMap = new(TypePairKeyComparer.Instance);
-    
+
     private ReadOnlyDictionary<HandlerKey, object> readOnlyHandlerMap;
     private ReadOnlyDictionary<TypePairKey, object> readOnlyHandlerMapByType;
     private ReadOnlyDictionary<TypePairKey, List<GlobalPipelineContainerInternal>> readOnlyGlobalPipelineMap;
@@ -31,30 +31,30 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
     {
         internal GlobalPipelineConfig Config { get; }
         internal object Invoker { get; } // PipelineInvoker<TRequest, TResponse>
-        
+
         internal GlobalPipelineContainerInternal(GlobalPipelineConfig config, object invoker)
         {
             Config = config;
             Invoker = invoker;
         }
-        
+
         public override bool Equals(object obj)
         {
             if (obj is not GlobalPipelineContainerInternal other)
                 return false;
-            
+
             if (Config.Order != other.Config.Order || Config.ExecutionStage != other.Config.ExecutionStage)
                 return false;
-            
+
             if (Invoker is Delegate thisDelegate && other.Invoker is Delegate otherDelegate)
             {
-                return thisDelegate.Method == otherDelegate.Method && 
+                return thisDelegate.Method == otherDelegate.Method &&
                        Equals(thisDelegate.Target, otherDelegate.Target);
             }
-            
+
             return false;
         }
-        
+
         public override int GetHashCode()
         {
             unchecked
@@ -62,14 +62,14 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
                 int hash = 17;
                 hash = hash * 23 + Config.Order;
                 hash = hash * 23 + Config.ExecutionStage;
-                
+
                 if (Invoker is Delegate del)
                 {
                     hash = hash * 23 + del.Method.GetHashCode();
                     if (del.Target != null)
                         hash = hash * 23 + del.Target.GetHashCode();
                 }
-                
+
                 return hash;
             }
         }
@@ -436,7 +436,7 @@ public sealed class HandlerRegistry(IServiceProvider serviceProvider)
 
                 throw new InvalidOperationException($"Handler not found for type {type} -> {responseType}");
             }
-            
+
             var objTypeKey = new TypePairKey(type, typeof(object));
             if (readOnlyHandlerMapByType.TryGetValue(objTypeKey, out var objHandler) && objHandler is SpaceRegistry.IObjectHandlerEntry objectHandler)
             {

@@ -58,7 +58,7 @@ public class GlobalPipelineAttributeRule : IDiagnosticRule
         return hasErrors;
     }
 
-    private void ValidateInterfaceImplementation(SourceProductionContext context, MethodDeclarationSyntax methodNode, 
+    private void ValidateInterfaceImplementation(SourceProductionContext context, MethodDeclarationSyntax methodNode,
         IMethodSymbol methodSymbol, INamedTypeSymbol classSymbol, ref bool hasErrors)
     {
         // Find the IGlobalPipeline interface implementation
@@ -74,7 +74,7 @@ public class GlobalPipelineAttributeRule : IDiagnosticRule
         // Rule 1: Must have exactly two parameters
         if (methodSymbol.Parameters.Length != 2)
         {
-            ReportDiagnostic(context, methodNode, "GLOBALPIPELINE010", 
+            ReportDiagnostic(context, methodNode, "GLOBALPIPELINE010",
                 "Method with GlobalPipelineAttribute must have exactly two parameters.");
             hasErrors = true;
             return;
@@ -87,17 +87,17 @@ public class GlobalPipelineAttributeRule : IDiagnosticRule
             namedParamType.TypeArguments.Length != 1 ||
             !SymbolEqualityComparer.Default.Equals(namedParamType.TypeArguments[0], requestType))
         {
-            ReportDiagnostic(context, methodNode, "GLOBALPIPELINE011", 
+            ReportDiagnostic(context, methodNode, "GLOBALPIPELINE011",
                 $"First parameter must be PipelineContext<{requestType.Name}> to match IGlobalPipeline<{requestType.Name}, {responseType.Name}>.");
             hasErrors = true;
         }
 
         // Rule 3: Return type must be Task<TResponse> or ValueTask<TResponse>
-        if (methodSymbol.ReturnType is not INamedTypeSymbol returnType || 
-            (returnType.Name != "Task" && returnType.Name != "ValueTask") || 
+        if (methodSymbol.ReturnType is not INamedTypeSymbol returnType ||
+            (returnType.Name != "Task" && returnType.Name != "ValueTask") ||
             returnType.TypeArguments.Length != 1)
         {
-            ReportDiagnostic(context, methodNode, "GLOBALPIPELINE012", 
+            ReportDiagnostic(context, methodNode, "GLOBALPIPELINE012",
                 "Return type must be Task<TResponse> or ValueTask<TResponse>.");
             hasErrors = true;
             return;
@@ -106,19 +106,19 @@ public class GlobalPipelineAttributeRule : IDiagnosticRule
         // Rule 4: Return type argument must match IGlobalPipeline<TRequest, TResponse>.TResponse
         if (!SymbolEqualityComparer.Default.Equals(returnType.TypeArguments[0], responseType))
         {
-            ReportDiagnostic(context, methodNode, "GLOBALPIPELINE013", 
+            ReportDiagnostic(context, methodNode, "GLOBALPIPELINE013",
                 $"Return type must be {returnType.Name}<{responseType.Name}> to match IGlobalPipeline<{requestType.Name}, {responseType.Name}>.");
             hasErrors = true;
         }
     }
 
-    private void ValidateMethodSignatureWithoutInterface(SourceProductionContext context, MethodDeclarationSyntax methodNode, 
+    private void ValidateMethodSignatureWithoutInterface(SourceProductionContext context, MethodDeclarationSyntax methodNode,
         IMethodSymbol methodSymbol, ref bool hasErrors)
     {
         // Rule 1: Must have exactly two parameters
         if (methodSymbol.Parameters.Length != 2)
         {
-            ReportDiagnostic(context, methodNode, "GLOBALPIPELINE020", 
+            ReportDiagnostic(context, methodNode, "GLOBALPIPELINE020",
                 "Method with GlobalPipelineAttribute must have exactly two parameters: PipelineContext<TRequest> and PipelineDelegate<TRequest, TResponse>.");
             hasErrors = true;
             return;
@@ -130,7 +130,7 @@ public class GlobalPipelineAttributeRule : IDiagnosticRule
             namedFirstParam.Name != SourceGenConstants.Context.PipelineName ||
             namedFirstParam.TypeArguments.Length != 1)
         {
-            ReportDiagnostic(context, methodNode, "GLOBALPIPELINE021", 
+            ReportDiagnostic(context, methodNode, "GLOBALPIPELINE021",
                 "First parameter must be PipelineContext<TRequest>. Consider implementing IGlobalPipeline<TRequest, TResponse> for compile-time type safety.");
             hasErrors = true;
         }
@@ -141,17 +141,17 @@ public class GlobalPipelineAttributeRule : IDiagnosticRule
             namedSecondParam.Name != "PipelineDelegate" ||
             namedSecondParam.TypeArguments.Length != 2)
         {
-            ReportDiagnostic(context, methodNode, "GLOBALPIPELINE022", 
+            ReportDiagnostic(context, methodNode, "GLOBALPIPELINE022",
                 "Second parameter must be PipelineDelegate<TRequest, TResponse>. Consider implementing IGlobalPipeline<TRequest, TResponse> for compile-time type safety.");
             hasErrors = true;
         }
 
         // Rule 4: Return type must be Task<TResponse> or ValueTask<TResponse>
-        if (methodSymbol.ReturnType is not INamedTypeSymbol returnType || 
-            (returnType.Name != "Task" && returnType.Name != "ValueTask") || 
+        if (methodSymbol.ReturnType is not INamedTypeSymbol returnType ||
+            (returnType.Name != "Task" && returnType.Name != "ValueTask") ||
             returnType.TypeArguments.Length != 1)
         {
-            ReportDiagnostic(context, methodNode, "GLOBALPIPELINE023", 
+            ReportDiagnostic(context, methodNode, "GLOBALPIPELINE023",
                 "Return type must be Task<TResponse> or ValueTask<TResponse>. Consider implementing IGlobalPipeline<TRequest, TResponse> for compile-time type safety.");
             hasErrors = true;
         }
@@ -168,14 +168,14 @@ public class GlobalPipelineAttributeRule : IDiagnosticRule
 
             if (!SymbolEqualityComparer.Default.Equals(requestFromContext, requestFromDelegate))
             {
-                ReportDiagnostic(context, methodNode, "GLOBALPIPELINE024", 
+                ReportDiagnostic(context, methodNode, "GLOBALPIPELINE024",
                     "TRequest type mismatch between PipelineContext<TRequest> and PipelineDelegate<TRequest, TResponse>.");
                 hasErrors = true;
             }
 
             if (!SymbolEqualityComparer.Default.Equals(responseFromDelegate, responseFromReturn))
             {
-                ReportDiagnostic(context, methodNode, "GLOBALPIPELINE025", 
+                ReportDiagnostic(context, methodNode, "GLOBALPIPELINE025",
                     "TResponse type mismatch between PipelineDelegate<TRequest, TResponse> and return type.");
                 hasErrors = true;
             }

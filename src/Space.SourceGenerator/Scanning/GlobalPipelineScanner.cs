@@ -42,15 +42,15 @@ internal static class GlobalPipelineScanner
             // Second type parameter is TResponse
             var tResponse = methodSymbol.TypeParameters[1];
             var respTypeName = tResponse.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            
+
             // Check return type for Task/ValueTask wrapping
             var returnType = methodSymbol.ReturnType;
             if (returnType is INamedTypeSymbol namedReturn)
             {
                 var taskName = namedReturn.Name;
-                bool voidLike = (namedReturn.Name == SourceGenConstants.Type.Task || namedReturn.Name == SourceGenConstants.Type.ValueTask) && 
+                bool voidLike = (namedReturn.Name == SourceGenConstants.Type.Task || namedReturn.Name == SourceGenConstants.Type.ValueTask) &&
                                namedReturn.TypeArguments.Length == 0;
-                
+
                 return (taskName, respTypeName, voidLike);
             }
         }
@@ -58,8 +58,8 @@ internal static class GlobalPipelineScanner
         // Fallback to original implementation
         var taskNameFallback = methodSymbol.GetResponseTaskName();
         var respTypeNameFallback = methodSymbol.GetResponseGenericTypeName();
-        bool voidLikeFallback = methodSymbol.ReturnType is INamedTypeSymbol r && 
-                               (r.Name == SourceGenConstants.Type.Task || r.Name == SourceGenConstants.Type.ValueTask) && 
+        bool voidLikeFallback = methodSymbol.ReturnType is INamedTypeSymbol r &&
+                               (r.Name == SourceGenConstants.Type.Task || r.Name == SourceGenConstants.Type.ValueTask) &&
                                r.TypeArguments.Length == 0;
         return (taskNameFallback, respTypeNameFallback, voidLikeFallback);
     }

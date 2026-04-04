@@ -36,7 +36,7 @@ public record GlobalPipelineCompileModel : BaseCompileModel
     {
         if (other is null) return false;
         if (ReferenceEquals(this, other)) return true;
-        
+
         // Only compare key identifying fields, not all properties like Properties dictionary
         return ClassFullName == other.ClassFullName &&
                MethodName == other.MethodName &&

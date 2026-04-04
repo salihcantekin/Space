@@ -82,7 +82,7 @@ public partial class SpaceRegistry
             pc.HandlerContextRef = handlerContext;
 
             var vt = _pipelineInvoker(pc, _finalDelegate);
-            
+
             if (vt.IsCompletedSuccessfully)
             {
                 PipelineContextPool<TRequest>.Return(pc);
@@ -132,7 +132,7 @@ public partial class SpaceRegistry
             pc.HandlerContextRef = handlerContext;
 
             var vt = _pipeline1(pc, _chain2);
-            
+
             if (vt.IsCompletedSuccessfully)
             {
                 PipelineContextPool<TRequest>.Return(pc);
@@ -187,7 +187,7 @@ public partial class SpaceRegistry
             pc.HandlerContextRef = handlerContext;
 
             var vt = _pipeline1(pc, _chain2);
-            
+
             if (vt.IsCompletedSuccessfully)
             {
                 PipelineContextPool<TRequest>.Return(pc);

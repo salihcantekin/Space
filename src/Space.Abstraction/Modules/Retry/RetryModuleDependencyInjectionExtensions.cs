@@ -21,8 +21,8 @@ public static class RetryModuleDependencyInjectionExtensions
             if (opt.ModuleProvider != null)
                 moduleProvider = opt.ModuleProvider;
             else
-            if (opt.ModuleProviderAction != null)
-                moduleProvider = opt.ModuleProviderAction(sp);
+                if (opt.ModuleProviderAction != null)
+                    moduleProvider = opt.ModuleProviderAction(sp);
 
             return moduleProvider as IRetryModuleProvider ?? new DefaultRetryModuleProvider();
         });

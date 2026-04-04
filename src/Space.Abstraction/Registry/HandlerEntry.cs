@@ -23,7 +23,7 @@ public partial class SpaceRegistry
     {
         protected readonly HandlerInvoker<TRequest, TResponse> handlerInvoker;
         protected readonly LightHandlerInvoker<TRequest, TResponse> lightInvoker;
-        
+
         // Pipeline storage - separating handler pipelines from global pipelines
         private readonly List<(int Order, PipelineInvoker<TRequest, TResponse> Invoker)> handlerPipelines;
         private readonly List<(int Order, int ExecutionStage, PipelineInvoker<TRequest, TResponse> Invoker)> globalPipelines;
@@ -113,20 +113,20 @@ public partial class SpaceRegistry
                     .OrderBy(gp => gp.Order)
                     .Select(gp => gp.Invoker);
                 result.AddRange(stage0);
-                
+
                 // Handler-specific pipelines
                 var handlerPipes = handlerPipelines
                     .OrderBy(hp => hp.Order)
                     .Select(hp => hp.Invoker);
                 result.AddRange(handlerPipes);
-                
+
                 // Stage 1: BeforeHandlerInner global pipelines
                 var stage1 = globalPipelines
                     .Where(gp => gp.ExecutionStage == 1)
                     .OrderBy(gp => gp.Order)
                     .Select(gp => gp.Invoker);
                 result.AddRange(stage1);
-                
+
                 // Stage 2 & 3: AfterHandlerInner and AfterHandler (reverse order)
                 var stage2 = globalPipelines
                     .Where(gp => gp.ExecutionStage == 2)
@@ -237,13 +237,13 @@ public partial class SpaceRegistry
         internal virtual ValueTask<TResponse> InvokeLight(IServiceProvider sp, ISpace space, TRequest request, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
-            
+
             if (lightInvoker == null)
             {
                 var ctxDbg = HandlerContext<TRequest>.Create(sp, request, ct);
                 return handlerInvoker(ctxDbg).AwaitAndReturnHandlerInvoke(ctxDbg);
             }
-            
+
             var lctx = new LightHandlerContext<TRequest>(request, sp, space, ct);
             return lightInvoker(in lctx);
         }
@@ -258,10 +258,10 @@ public partial class SpaceRegistry
             {
                 return handlerInvoker(handlerContext);
             }
-            
+
             if (compositionDirty)
                 EnsureComposed();
-            
+
             return composedInvoke(handlerContext);
         }
 
