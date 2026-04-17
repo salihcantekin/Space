@@ -8,8 +8,6 @@ public class RetryModulePipelineWrapper<TRequest, TResponse>(RetryModuleConfig c
     where TRequest : notnull
     where TResponse : notnull
 {
-    public override ValueTask<TResponse> HandlePipeline(PipelineContext<TRequest> ctx, PipelineDelegate<TRequest, TResponse> next)
-    {
-        return provider.Execute<TRequest, TResponse>(ctx, next, cfg);
-    }
+    public override ValueTask<TResponse> HandlePipeline(PipelineContext<TRequest> ctx, PipelineDelegate<TRequest, TResponse> next) 
+        => provider.Execute<TRequest, TResponse>(ctx, next, cfg);
 }

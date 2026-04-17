@@ -14,11 +14,9 @@ public class AuditModule(IServiceProvider serviceProvider) : SpaceModule(service
 
     public override Type GetAttributeType() => typeof(AuditModuleAttribute);
 
-    private IReadOnlyDictionary<string, AuditModuleOptions> GetGlobalProfiles()
-    {
-        return ServiceProvider.GetService<IModuleGlobalOptionsAccessor<AuditModuleOptions>>()?.Profiles
+    private IReadOnlyDictionary<string, AuditModuleOptions> GetGlobalProfiles() 
+        => ServiceProvider.GetService<IModuleGlobalOptionsAccessor<AuditModuleOptions>>()?.Profiles
                ?? new Dictionary<string, AuditModuleOptions>();
-    }
 
     private static IReadOnlyDictionary<string, object> ExtractProfileProperties(AuditModuleOptions profileOpt)
     {

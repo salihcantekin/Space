@@ -6,10 +6,7 @@ public class BaseConfig
 {
     public Dictionary<string, object> Properties { get; set; } = [];
 
-    public object GetProperty(string key)
-    {
-        return Properties.TryGetValue(key, out var value) ? value : null;
-    }
+    public object GetProperty(string key) => Properties.TryGetValue(key, out var value) ? value : null;
 
     public void SetProperty(string key, object value)
     {

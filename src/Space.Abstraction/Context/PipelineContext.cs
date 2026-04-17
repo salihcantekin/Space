@@ -80,10 +80,7 @@ public sealed class PipelineContext<TRequest> : BaseContext<TRequest>, IDisposab
 
     public object GetItem(object key) => itemsHolder?.Get(key);
 
-    public void SetItem(object key, object value)
-    {
-        (itemsHolder ??= new ItemsHolder()).Set(key, value);
-    }
+    public void SetItem(object key, object value) => (itemsHolder ??= new ItemsHolder()).Set(key, value);
 
     internal void ClearItems() => itemsHolder?.Clear();
 
@@ -99,10 +96,8 @@ public sealed class PipelineContext<TRequest> : BaseContext<TRequest>, IDisposab
         ClearItems();
     }
 
-    public static PipelineContext<TRequest> Create(TRequest request, IServiceProvider serviceProvider, ISpace space, CancellationToken cancellationToken)
-    {
-        return PipelineContextPool<TRequest>.Get(request, serviceProvider, space, cancellationToken);
-    }
+    public static PipelineContext<TRequest> Create(TRequest request, IServiceProvider serviceProvider, ISpace space, CancellationToken cancellationToken) 
+        => PipelineContextPool<TRequest>.Get(request, serviceProvider, space, cancellationToken);
 
     public void Dispose()
     {

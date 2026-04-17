@@ -20,10 +20,7 @@ public partial class SpaceRegistry
         public LightHandlerEntry(
             HandlerInvoker<TRequest, TResponse> handlerInvoker,
             LightHandlerInvoker<TRequest, TResponse> lightInvoker)
-            : base(handlerInvoker, lightInvoker, null, null)
-        {
-            _lightInvoker = lightInvoker ?? throw new ArgumentNullException(nameof(lightInvoker));
-        }
+            : base(handlerInvoker, lightInvoker, null, null) => _lightInvoker = lightInvoker ?? throw new ArgumentNullException(nameof(lightInvoker));
 
         /// <summary>
         /// Returns the underlying light invoker delegate for direct caching in Space.cs

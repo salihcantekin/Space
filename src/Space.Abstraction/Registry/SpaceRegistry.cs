@@ -47,24 +47,17 @@ public partial class SpaceRegistry
     }
 
     public void RegisterPipeline<TRequest, TResponse>(string handlerName, PipelineConfig pipelineConfig,
-        PipelineInvoker<TRequest, TResponse> pipeline)
-    {
-        handlerRegistry.RegisterPipeline(handlerName, pipelineConfig, pipeline);
-    }
+        PipelineInvoker<TRequest, TResponse> pipeline) => handlerRegistry.RegisterPipeline(handlerName, pipelineConfig, pipeline);
 
     public void RegisterGlobalPipeline<TRequest, TResponse>(GlobalPipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)
-    {
-        handlerRegistry.RegisterGlobalPipeline(config, invoker);
-    }
+        => handlerRegistry.RegisterGlobalPipeline(config, invoker);
 
     public void RegisterHandler<TRequest, TResponse>(
         HandlerInvoker<TRequest, TResponse> handler,
         string name = "",
         IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelines = null,
-        LightHandlerInvoker<TRequest, TResponse> lightInvoker = null)
-    {
-        handlerRegistry.RegisterHandler(handler, name, pipelines, lightInvoker);
-    }
+        LightHandlerInvoker<TRequest, TResponse> lightInvoker = null) 
+        => handlerRegistry.RegisterHandler(handler, name, pipelines, lightInvoker);
 
     /// <summary>
     /// Register a pipeline-free handler using the optimized LightHandlerEntry.
@@ -73,10 +66,7 @@ public partial class SpaceRegistry
     public void RegisterLightHandler<TRequest, TResponse>(
         HandlerInvoker<TRequest, TResponse> handler,
         string name,
-        LightHandlerInvoker<TRequest, TResponse> lightInvoker)
-    {
-        handlerRegistry.RegisterLightHandler(handler, name, lightInvoker);
-    }
+        LightHandlerInvoker<TRequest, TResponse> lightInvoker) => handlerRegistry.RegisterLightHandler(handler, name, lightInvoker);
 
     /// <summary>
     /// Register a handler with exactly one pipeline using SinglePipelineEntry.
@@ -85,10 +75,7 @@ public partial class SpaceRegistry
     public void RegisterSinglePipelineHandler<TRequest, TResponse>(
         HandlerInvoker<TRequest, TResponse> handler,
         string name,
-        PipelineInvoker<TRequest, TResponse> pipeline)
-    {
-        handlerRegistry.RegisterSinglePipelineHandler(handler, name, pipeline);
-    }
+        PipelineInvoker<TRequest, TResponse> pipeline) => handlerRegistry.RegisterSinglePipelineHandler(handler, name, pipeline);
 
     /// <summary>
     /// Register a handler with exactly two pipelines using TwoPipelinesEntry.
@@ -98,10 +85,7 @@ public partial class SpaceRegistry
         HandlerInvoker<TRequest, TResponse> handler,
         string name,
         PipelineInvoker<TRequest, TResponse> pipeline1,
-        PipelineInvoker<TRequest, TResponse> pipeline2)
-    {
-        handlerRegistry.RegisterTwoPipelinesHandler(handler, name, pipeline1, pipeline2);
-    }
+        PipelineInvoker<TRequest, TResponse> pipeline2) => handlerRegistry.RegisterTwoPipelinesHandler(handler, name, pipeline1, pipeline2);
 
     /// <summary>
     /// Register a handler with exactly three pipelines using ThreePipelinesEntry.
@@ -112,10 +96,7 @@ public partial class SpaceRegistry
         string name,
         PipelineInvoker<TRequest, TResponse> pipeline1,
         PipelineInvoker<TRequest, TResponse> pipeline2,
-        PipelineInvoker<TRequest, TResponse> pipeline3)
-    {
-        handlerRegistry.RegisterThreePipelinesHandler(handler, name, pipeline1, pipeline2, pipeline3);
-    }
+        PipelineInvoker<TRequest, TResponse> pipeline3) => handlerRegistry.RegisterThreePipelinesHandler(handler, name, pipeline1, pipeline2, pipeline3);
 
     public void RegisterModule<TRequest, TResponse>(string moduleName, string handlerName = "", string profileName = "")
     {
@@ -141,10 +122,8 @@ public partial class SpaceRegistry
         HandlerInvoker<TRequest, TResponse> handler,
         string name,
         IEnumerable<(PipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> pipelines,
-        IEnumerable<(GlobalPipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> globalPipelines)
-    {
-        handlerRegistry.RegisterHandlerWithGlobalPipelines(handler, name, pipelines, globalPipelines);
-    }
+        IEnumerable<(GlobalPipelineConfig config, PipelineInvoker<TRequest, TResponse> invoker)> globalPipelines) 
+        => handlerRegistry.RegisterHandlerWithGlobalPipelines(handler, name, pipelines, globalPipelines);
 
     // Lightweight handler entry access for fast path
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

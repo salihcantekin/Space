@@ -12,13 +12,8 @@ public interface IModuleGlobalOptionsAccessor<TModuleOptions>
     IReadOnlyDictionary<string, TModuleOptions> Profiles { get; }
 }
 
-public sealed class ModuleGlobalOptionsAccessor<TModuleOptions> : IModuleGlobalOptionsAccessor<TModuleOptions>
+public sealed class ModuleGlobalOptionsAccessor<TModuleOptions>(IReadOnlyDictionary<string, TModuleOptions> profiles) : IModuleGlobalOptionsAccessor<TModuleOptions>
     where TModuleOptions : class
 {
-    public ModuleGlobalOptionsAccessor(IReadOnlyDictionary<string, TModuleOptions> profiles)
-    {
-        Profiles = profiles ?? new Dictionary<string, TModuleOptions>();
-    }
-
-    public IReadOnlyDictionary<string, TModuleOptions> Profiles { get; }
+    public IReadOnlyDictionary<string, TModuleOptions> Profiles { get; } = profiles ?? new Dictionary<string, TModuleOptions>();
 }

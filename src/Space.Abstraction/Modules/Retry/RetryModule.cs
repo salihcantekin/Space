@@ -13,18 +13,14 @@ public class RetryModule(IServiceProvider serviceProvider) : SpaceModule(service
 
     public override Type GetAttributeType() => typeof(RetryModuleAttribute);
 
-    private IReadOnlyDictionary<string, RetryModuleOptions> GetGlobalProfiles()
-    {
-        return ServiceProvider.GetService<IModuleGlobalOptionsAccessor<RetryModuleOptions>>()?.Profiles
+    private IReadOnlyDictionary<string, RetryModuleOptions> GetGlobalProfiles() 
+        => ServiceProvider.GetService<IModuleGlobalOptionsAccessor<RetryModuleOptions>>()?.Profiles
                ?? new Dictionary<string, RetryModuleOptions>();
-    }
 
-    private static IReadOnlyDictionary<string, object> ExtractProfileProperties(RetryModuleOptions profileOpt)
-    {
-        return profileOpt is null
+    private static IReadOnlyDictionary<string, object> ExtractProfileProperties(RetryModuleOptions profileOpt) 
+        => profileOpt is null
                 ? []
                 : RetrySettingsPropertiesMapper.ToDictionary(profileOpt);
-    }
 
     private static string NormalizeProfileName(string name)
         => string.IsNullOrWhiteSpace(name) ? ModuleConstants.DefaultProfileName : name;

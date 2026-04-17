@@ -14,14 +14,10 @@ public sealed class NotificationContext<TRequest> : BaseContext<TRequest>, IDisp
     }
 
     public static NotificationContext<TRequest> Create(HandlerContextStruct handlerContext)
-    {
-        return NotificationContextPool<TRequest>.Get((TRequest)handlerContext.Request, handlerContext.ServiceProvider, handlerContext.Space, handlerContext.CancellationToken);
-    }
+        => NotificationContextPool<TRequest>.Get((TRequest)handlerContext.Request, handlerContext.ServiceProvider, handlerContext.Space, handlerContext.CancellationToken);
 
-    public static NotificationContext<TRequest> Create(IServiceProvider sp, TRequest request, CancellationToken ct = default)
-    {
-        return NotificationContextPool<TRequest>.Get(request, sp, HandlerRegistry.Space, ct);
-    }
+    public static NotificationContext<TRequest> Create(IServiceProvider sp, TRequest request, CancellationToken ct = default) 
+        => NotificationContextPool<TRequest>.Get(request, sp, HandlerRegistry.Space, ct);
 
     public void Dispose()
     {

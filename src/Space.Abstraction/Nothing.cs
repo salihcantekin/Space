@@ -21,10 +21,7 @@ public readonly struct ReqResIdentifier(Type requestType, Type responseType)
     public Type RequestType { get; } = requestType;
     public Type ResponseType { get; } = responseType;
 
-    public static ReqResIdentifier From<TRequest, TResponse>()
-    {
-        return new ReqResIdentifier(typeof(TRequest), typeof(TResponse));
-    }
+    public static ReqResIdentifier From<TRequest, TResponse>() => new ReqResIdentifier(typeof(TRequest), typeof(TResponse));
 }
 
 public readonly struct HandleIdentifier(string name, Type requestType, Type responseType)
@@ -33,10 +30,8 @@ public readonly struct HandleIdentifier(string name, Type requestType, Type resp
     public Type RequestType { get; } = requestType;
     public Type ResponseType { get; } = responseType;
 
-    public static HandleIdentifier From<TRequest, TResponse>(string name = null)
-    {
-        return new HandleIdentifier(name ?? "", typeof(TRequest), typeof(TResponse));
-    }
+    public static HandleIdentifier From<TRequest, TResponse>(string name = null) 
+        => new HandleIdentifier(name ?? "", typeof(TRequest), typeof(TResponse));
 }
 
 public readonly struct ModuleIdentifier(HandleIdentifier handleIdentifier, string profileName)
@@ -51,7 +46,5 @@ public readonly struct ModuleIdentifier(HandleIdentifier handleIdentifier, strin
     }
 
     public static ModuleIdentifier From(HandleIdentifier handleIdentifier, string profileName)
-    {
-        return new ModuleIdentifier(handleIdentifier, string.IsNullOrEmpty(profileName) ? ModuleConstants.DefaultProfileName : profileName);
-    }
+        => new ModuleIdentifier(handleIdentifier, string.IsNullOrEmpty(profileName) ? ModuleConstants.DefaultProfileName : profileName);
 }

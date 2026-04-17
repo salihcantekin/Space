@@ -38,13 +38,11 @@ public readonly struct HandlerKey : IEquatable<HandlerKey>
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Equals(HandlerKey other)
-    {
-        return Hash == other.Hash &&
+    public bool Equals(HandlerKey other) =>
+               Hash == other.Hash &&
                RequestType == other.RequestType &&
                ResponseType == other.ResponseType &&
                string.Equals(Name, other.Name, StringComparison.Ordinal);
-    }
 
     public override bool Equals(object obj) => obj is HandlerKey other && Equals(other);
 
@@ -94,12 +92,10 @@ public readonly struct TypePairKey : IEquatable<TypePairKey>
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Equals(TypePairKey other)
-    {
-        return Hash == other.Hash &&
+    public bool Equals(TypePairKey other) => 
+               Hash == other.Hash &&
                RequestType == other.RequestType &&
                ResponseType == other.ResponseType;
-    }
 
     public override bool Equals(object obj) => obj is TypePairKey other && Equals(other);
 

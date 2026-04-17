@@ -39,10 +39,7 @@ public abstract class ProfileOnlyModuleOptions<T> where T : class, new()
 
     public IReadOnlyDictionary<string, T> Profiles => profiles;
 
-    public void WithDefaultProfile(Action<T> configure)
-    {
-        WithProfile("Default", configure);
-    }
+    public void WithDefaultProfile(Action<T> configure) => WithProfile("Default", configure);
 
     public void WithProfile(string profileName, Action<T> configure)
     {
