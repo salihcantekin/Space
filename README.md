@@ -2,6 +2,8 @@
 
 High-performance, source-generator powered mediator / messaging framework for .NET. Eliminates runtime reflection, minimizes boilerplate, and provides an extensible module + pipeline model for cross-cutting concerns (e.g., caching, auditing).
 
+**Links:** [Project Website](https://salihcantekin.github.io/Space/) · [GitHub](https://github.com/salihcantekin/Space) · [NuGet: Space.Abstraction](https://www.nuget.org/packages/Space.Abstraction)
+
 ---
 ## Status & Packages
 
