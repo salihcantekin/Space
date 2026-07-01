@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Space — High-performance mediator for .NET</title>
+  <meta name="description" content="Source-generator powered mediator and messaging framework for .NET. Zero runtime reflection, minimal boilerplate, extensible pipeline model." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚀</text></svg>" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0A0E17;
+      --bg-card: #111827;
+      --border: #1E293B;
+      --text: #F1F5F9;
+      --text-muted: #94A3B8;
+      --primary: #0891B2;
+      --accent: #7C3AED;
+      --radius: 12px;
+    }
+    body {
+      font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+    }
+    a { color: var(--primary); text-decoration: none; }
+    a:hover { color: #06B6D4; }
+    .container { max-width: 1000px; margin: 0 auto; padding: 0 24px; }
+    nav {
+      position: sticky; top: 0; z-index: 10;
+      background: rgba(10, 14, 23, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 0;
+    }
+    nav .container { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .nav-logo { font-weight: 700; font-size: 1.15rem; color: var(--text); }
+    .nav-logo span { color: var(--primary); }
+    .nav-gh {
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+    .hero {
+      padding: 96px 0 72px;
+      text-align: center;
+      background: radial-gradient(ellipse 70% 50% at 50% -10%, rgba(8, 145, 178, 0.15), transparent 70%);
+    }
+    .hero h1 {
+      font-size: clamp(2.2rem, 5vw, 3.5rem);
+      font-weight: 800;
+      margin-bottom: 16px;
+    }
+    .hero p {
+      max-width: 680px;
+      margin: 0 auto 28px;
+      color: var(--text-muted);
+      font-size: 1.1rem;
+    }
+    .badges { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 28px; }
+    .badge {
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text-muted);
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+    }
+    .cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 12px 20px; border-radius: 8px; font-weight: 600; font-size: 0.95rem;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-secondary { border: 1px solid var(--border); color: var(--text); background: transparent; }
+    section { padding: 64px 0; border-top: 1px solid var(--border); }
+    h2 { font-size: 1.75rem; margin-bottom: 24px; }
+    .grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+    .card h3 { margin-bottom: 8px; font-size: 1.05rem; }
+    .card p { color: var(--text-muted); font-size: 0.95rem; }
+    pre {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      color: #e2e8f0;
+    }
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 0;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="container">
+      <div class="nav-logo">Space<span>.NET</span></div>
+      <a class="nav-gh" href="https://github.com/salihcantekin/Space" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <h1>Space</h1>
+      <p>High-performance, source-generator powered mediator and messaging framework for .NET. Eliminates runtime reflection, minimizes boilerplate, and provides an extensible pipeline model.</p>
+      <div class="badges">
+        <span class="badge">.NET</span>
+        <span class="badge">Source Generator</span>
+        <span class="badge">Mediator</span>
+        <span class="badge">NuGet</span>
+        <span class="badge">MIT</span>
+      </div>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://www.nuget.org/packages/Space.Abstraction" target="_blank" rel="noopener">Get on NuGet</a>
+        <a class="btn btn-secondary" href="https://github.com/salihcantekin/Space" target="_blank" rel="noopener">View on GitHub</a>
+      </div>
+    </div>
+  </header>
+
+  <section>
+    <div class="container">
+      <h2>Why Space?</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Zero Runtime Reflection</h3>
+          <p>Handlers, pipelines, and notifications are wired at compile time via source generators.</p>
+        </div>
+        <div class="card">
+          <h3>Extensible Pipelines</h3>
+          <p>Attach cross-cutting concerns like logging, caching, and auditing with minimal ceremony.</p>
+        </div>
+        <div class="card">
+          <h3>Modular Architecture</h3>
+          <p>Split handlers across projects with a root aggregator model for large solutions.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <h2>Quick Start</h2>
+      <pre><code>dotnet add package Space.Abstraction
+dotnet add package Space.DependencyInjection
+
+services.AddSpace(opt =&gt;
+{
+    opt.NotificationDispatchType = NotificationDispatchType.Parallel;
+});
+
+var response = await space.Send&lt;UserLoginResponse&gt;(new UserLoginRequest("demo"));</code></pre>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <h2>Packages</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Space.Abstraction</h3>
+          <p>Core abstractions and source generator analyzer.</p>
+        </div>
+        <div class="card">
+          <h3>Space.DependencyInjection</h3>
+          <p>DI extensions and runtime <code>ISpace</code> implementation.</p>
+        </div>
+        <div class="card">
+          <h3>Space.Modules.InMemoryCache</h3>
+          <p>Optional in-memory caching module with attribute integration.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+  <div class="container">
+    Built by <a href="https://higgs.digital" target="_blank" rel="noopener">HiggsDigital</a> ·
+    <a href="https://github.com/salihcantekin/Space/blob/master/README.md" target="_blank" rel="noopener">Full documentation on GitHub</a>
+  </div>
+  </footer>
+</body>
+</html>
